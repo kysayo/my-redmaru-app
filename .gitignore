@@ -1,0 +1,18 @@
+# 依存パッケージ
+node_modules/
+
+# WXT ビルド出力
+.output/
+.wxt/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
