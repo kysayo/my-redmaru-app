@@ -1,23 +1,102 @@
-## Chrome拡張として実装する
+# RedmaruApp 仕様書
 
-## ドメインの違う2か所のページで利用する事を想定している
+## 概要
 
-## 情報送信側のRedmineのページのChrome拡張にてボタンを押して、情報受信側の同じchrome拡張で情報を受信する
+Redmine のチケット情報を社内 AI チャット（MaruCha）に送信する Chrome 拡張機能。
 
-### 情報送信側：Redmine
+## 対象 URL
 
-- チケットのページにChrome拡張によるボタンが追加する
+| ロール | URL パターン |
+|--------|-------------|
+| Redmine（送信側） | `https://misol-dev.cloud.redmine.jp/issues/*` |
+| AI チャット（受信側） | `https://www.marubeni-chatbot.com/*` |
 
-- ボタンを押すとそのページのチケットの内容を取得する
+---
 
-### 情報受領側：社内のAIチャット
+## 機能
 
-- 情報送信側でボタンを押すと、受信側となる社内のAIチャットの新規チャットURLをブラウザの別のタブで開き、チャットの入力欄にチケットの内容と定型文を記載する。
+### Redmine 側（送信）
 
-- チャットの送信ボタンはユーザーが押すため、chrome拡張で押す必要はない
+- チケットページに「Send To MaruCha」ボタンを注入する
+- ボタンクリックで以下の情報を Redmine API（`/issues/{id}.json?include=journals`）で取得する
+  - チケット ID・件名・トラッカー・ステータス・優先度・担当者・作成者
+  - 説明文
+  - カスタムフィールド（値が空のものは除外）
+  - コメント（journals のうち notes が空でないもの）
+- Redmine API の認証キーは `ViewCustomize.context.user.apiKey` から取得する
 
-- 定型文は「xxxxxxx(社内で決まっているURL)にチケット一覧がissue.csvで格納されています。サブフォルダに各チケットのコメント一覧が格納されています。今回の事象と似た事象があれば事象の名前と資料のフォルダを教えて」とし、chrome拡張の設定でユーザーが変更可能とする。
+### AI チャット側（受信）
 
-- 定型文は将来的には複数登録できるようにする。
+- Background Service Worker から `INSERT_TEXT` メッセージを受信する
+- SPA のレンダリング完了まで最大 15 秒ポーリングし、入力欄（`textarea` または `contenteditable`）が現れるのを待つ
+- React / Vue 等のフレームワーク対応のため `nativeInputValueSetter` 経由でテキストを挿入し、`input` / `change` イベントを発火する
+- 送信ボタンはユーザーが手動で押す（拡張は自動送信しない）
 
+### Background Service Worker（仲介）
 
+- Redmine Content Script から `OPEN_AI_CHAT` メッセージを受信する
+- `chrome.storage.sync` から定型文を取得し、チケット情報と結合する（定型文 + 改行 2 つ + チケット情報）
+- AI チャットを新しいタブで開き、タブのロード完了後に `INSERT_TEXT` メッセージを送信する
+
+### 設定ページ（Options Page）
+
+- 定型文をテキストエリアで編集・保存できる
+- `chrome.storage.sync` に保存される（Chrome アカウント同期が有効になる）
+- デフォルトの定型文：
+  > このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。
+
+---
+
+## アーキテクチャ
+
+### コンポーネント構成
+
+| ファイル | 種別 | 説明 |
+|---------|------|------|
+| `entrypoints/redmine.content.ts` | Content Script（Isolated World） | ボタン注入・チケット情報取得・メッセージ送信 |
+| `entrypoints/redmine-bridge.content.ts` | Content Script（MAIN World） | ViewCustomize から API キーを取得し Isolated World に渡す |
+| `entrypoints/aichat.content.ts` | Content Script（Isolated World） | AI チャット入力欄へのテキスト挿入 |
+| `entrypoints/background.ts` | Background Service Worker | メッセージ仲介・タブ管理・定型文結合 |
+| `entrypoints/options/` | Options Page（Vue 3） | 定型文設定 UI |
+
+### メッセージフロー
+
+```
+[Redmineページ]
+  └─ ボタンクリック
+      ├─ redmine-bridge.content.ts（MAIN World）に APIキーを要求
+      │    カスタムイベント: redmaru:request-apikey → redmaru:apikey
+      │
+      └─ background.ts へ OPEN_AI_CHAT メッセージ送信
+           └─ AIチャットを新規タブで開く
+               └─ タブのロード完了後 aichat.content.ts へ INSERT_TEXT 送信
+                    └─ 入力欄にテキストを挿入
+```
+
+### ViewCustomize APIキー取得の仕組み
+
+Content Script は Isolated World で動作するため `window.ViewCustomize` に直接アクセスできない。
+そのため MAIN World で動作する `redmine-bridge.content.ts` をブリッジとして使い、カスタムイベントで API キーを受け渡す。
+
+| イベント名 | 方向 | 内容 |
+|-----------|------|------|
+| `redmaru:request-apikey` | Isolated World → MAIN World | API キーの要求 |
+| `redmaru:apikey` | MAIN World → Isolated World | API キーの返答（CustomEvent.detail に格納） |
+
+---
+
+## 技術スタック
+
+| 項目 | 内容 |
+|------|------|
+| フレームワーク | WXT 0.20.18 |
+| 言語 | TypeScript |
+| UI | Vue 3（Options Page のみ） |
+| ストレージ | chrome.storage.sync |
+| 対象ブラウザ | Chrome（Manifest V3） |
+
+---
+
+## 将来仕様
+
+- 定型文の複数登録・切り替え機能
