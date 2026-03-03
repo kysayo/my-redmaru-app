@@ -20,19 +20,20 @@ async function save() {
 </script>
 
 <template>
-  <h1>RedmaruApp 設定</h1>
+  <h1>Send2MaruCha 設定 / Settings</h1>
 
   <section>
-    <label for="template">定型文</label>
+    <label for="template">定型文 / Template</label>
     <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
-      AIチャットに送信する際にチケット情報の前に追加される文章です。
+      AIチャットに送信する際にチケット情報の前に追加される文章です。<br>
+      Text added before the ticket content when sending to AI chat.
     </p>
     <textarea
       id="template"
       v-model="template"
       rows="6"
     />
-    <button @click="save">保存</button>
-    <p v-if="saved" class="saved-msg">保存しました</p>
+    <button @click="save">保存 / Save</button>
+    <p v-if="saved" class="saved-msg">保存しました / Saved</p>
   </section>
 </template>
