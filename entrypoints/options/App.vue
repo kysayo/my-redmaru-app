@@ -2,9 +2,7 @@
 import { ref, onMounted } from 'vue';
 
 const DEFAULT_TEMPLATE =
-  'xxxxxxx（社内で決まっているURL）にチケット一覧がissue.csvで格納されています。' +
-  'サブフォルダに各チケットのコメント一覧が格納されています。' +
-  '今回の事象と似た事象があれば事象の名前と資料のフォルダを教えて';
+  'このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。';
 
 const template = ref('');
 const saved = ref(false);
@@ -27,7 +25,7 @@ async function save() {
   <section>
     <label for="template">定型文</label>
     <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
-      AIチャットに送信する際にチケット情報の後ろに追加される文章です。
+      AIチャットに送信する際にチケット情報の前に追加される文章です。
     </p>
     <textarea
       id="template"

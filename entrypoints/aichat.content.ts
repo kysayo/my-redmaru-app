@@ -6,7 +6,7 @@
  * 例: '*://aichat.example.com/*'
  */
 export default defineContentScript({
-  matches: ['*://*/'],
+  matches: ['https://www.marubeni-chatbot.com/*'],
   main() {
     browser.runtime.onMessage.addListener(handleMessage);
   },
@@ -19,12 +19,21 @@ async function handleMessage(message: unknown) {
   await insertTextToChat(text);
 }
 
+// SPAのレンダリング完了を待つため、textareaが現れるまでポーリングする
+async function waitForInputEl(timeout = 15000): Promise<HTMLTextAreaElement | HTMLElement | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const el =
+      document.querySelector<HTMLTextAreaElement>('textarea') ??
+      document.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (el) return el;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return null;
+}
+
 async function insertTextToChat(text: string) {
-  // TODO: 実際のAIチャットのDOM構造に合わせてセレクタを調整すること
-  // ブラウザのデバッグモードで入力欄の要素を特定してください
-  const inputEl =
-    document.querySelector<HTMLTextAreaElement>('textarea') ??
-    document.querySelector<HTMLElement>('[contenteditable="true"]');
+  const inputEl = await waitForInputEl();
 
   if (!inputEl) {
     console.warn('[redmaru] チャット入力欄が見つかりませんでした');

@@ -7,27 +7,24 @@
 
 // デフォルトの定型文
 const DEFAULT_TEMPLATE =
-  'xxxxxxx（社内で決まっているURL）にチケット一覧がissue.csvで格納されています。' +
-  'サブフォルダに各チケットのコメント一覧が格納されています。' +
-  '今回の事象と似た事象があれば事象の名前と資料のフォルダを教えて';
+  'このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。';
 
-// TODO: 実際のAIチャットの新規チャットURLに変更すること
-const AI_CHAT_URL = 'https://aichat.example.com/new';
+const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(handleMessage);
 });
 
-async function handleMessage(message: unknown, sender: chrome.runtime.MessageSender) {
+async function handleMessage(message: unknown) {
   if (!isOpenAiChatMessage(message)) return;
 
   const { ticketInfo } = message.payload;
 
   // 保存された定型文を取得（なければデフォルト）
   const result = await browser.storage.sync.get({ template: DEFAULT_TEMPLATE });
-  const template: string = result.template;
+  const template = typeof result.template === 'string' ? result.template : DEFAULT_TEMPLATE;
 
-  const fullText = `${ticketInfo}\n\n${template}`;
+  const fullText = template ? `${template}\n\n${ticketInfo}` : ticketInfo;
 
   // AIチャットを新しいタブで開く
   const tab = await browser.tabs.create({ url: AI_CHAT_URL });
