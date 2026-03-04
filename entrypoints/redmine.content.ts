@@ -22,7 +22,7 @@ function injectButton() {
   <path d="M9.0 8L7.1 6.4M9.0 8L7.1 9.6" fill="none" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round"/>
   <circle cx="16.0" cy="7.6" r="4.7" fill="none" stroke="#e11d2e" stroke-width="2.4"/>
   <path d="M19.2 10.9L21.5 13.2" fill="none" stroke="#e11d2e" stroke-width="2.4" stroke-linecap="round"/>
-</svg>Send To MaruCha`;
+</svg>to MaruCha`;
   button.style.cssText = [
     'margin-left: 8px',
     'padding: 4px 12px',
@@ -120,7 +120,7 @@ async function handleButtonClick() {
 
     await browser.runtime.sendMessage({
       type: 'OPEN_AI_CHAT',
-      payload: { ticketInfo },
+      payload: { content: ticketInfo, source: 'redmine' },
     });
   } catch (err) {
     console.error('[redmaru] エラー:', err);

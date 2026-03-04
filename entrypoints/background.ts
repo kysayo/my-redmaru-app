@@ -1,13 +1,15 @@
 /**
  * Background Service Worker
- * Redmine Content Script と AIチャット Content Script のメッセージを仲介する
+ * Redmine / Teams Content Script と AIチャット Content Script のメッセージを仲介する
  *
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
 // デフォルトの定型文
-const DEFAULT_TEMPLATE =
+const DEFAULT_REDMINE_TEMPLATE =
   'このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。';
+
+const DEFAULT_TEAMS_TEMPLATE = '以下はTeamsチャットのメッセージ履歴です。要約してください。';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
 
@@ -18,13 +20,24 @@ export default defineBackground(() => {
 async function handleMessage(message: unknown) {
   if (!isOpenAiChatMessage(message)) return;
 
-  const { ticketInfo } = message.payload;
+  const { content, source } = message.payload;
 
-  // 保存された定型文を取得（なければデフォルト）
-  const result = await browser.storage.sync.get({ template: DEFAULT_TEMPLATE });
-  const template = typeof result.template === 'string' ? result.template : DEFAULT_TEMPLATE;
+  // source に応じて適切なテンプレートを取得
+  const result = await browser.storage.sync.get({
+    template: DEFAULT_REDMINE_TEMPLATE,
+    teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
+  });
 
-  const fullText = template ? `${template}\n\n${ticketInfo}` : ticketInfo;
+  const template =
+    source === 'teams'
+      ? typeof result.teamsTemplate === 'string'
+        ? result.teamsTemplate
+        : DEFAULT_TEAMS_TEMPLATE
+      : typeof result.template === 'string'
+        ? result.template
+        : DEFAULT_REDMINE_TEMPLATE;
+
+  const fullText = template ? `${template}\n\n${content}` : content;
 
   // AIチャットを新しいタブで開く
   const tab = await browser.tabs.create({ url: AI_CHAT_URL });
@@ -46,14 +59,19 @@ async function handleMessage(message: unknown) {
 // 型ガード
 interface OpenAiChatMessage {
   type: 'OPEN_AI_CHAT';
-  payload: { ticketInfo: string };
+  payload: {
+    content: string;
+    source: 'redmine' | 'teams';
+  };
 }
 
 function isOpenAiChatMessage(msg: unknown): msg is OpenAiChatMessage {
+  const m = msg as OpenAiChatMessage;
   return (
-    typeof msg === 'object' &&
-    msg !== null &&
-    (msg as OpenAiChatMessage).type === 'OPEN_AI_CHAT' &&
-    typeof (msg as OpenAiChatMessage).payload?.ticketInfo === 'string'
+    typeof m === 'object' &&
+    m !== null &&
+    m.type === 'OPEN_AI_CHAT' &&
+    typeof m.payload?.content === 'string' &&
+    (m.payload?.source === 'redmine' || m.payload?.source === 'teams')
   );
 }
