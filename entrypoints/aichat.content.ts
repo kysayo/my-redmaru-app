@@ -67,6 +67,7 @@ async function insertTextToChat(text: string) {
     sel?.removeAllRanges();
     sel?.addRange(range);
   }
+  inputEl.scrollTop = 0;
 }
 
 // 型ガード

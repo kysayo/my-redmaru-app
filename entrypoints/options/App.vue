@@ -4,8 +4,9 @@ import { ref, onMounted } from 'vue';
 type TabKey = 'redmine' | 'teams';
 
 const DEFAULT_REDMINE_TEMPLATE =
-  'このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。';
-const DEFAULT_TEAMS_TEMPLATE = '以下はTeamsチャットのメッセージ履歴です。要約してください。';
+  'これはRedmineチケットの本文と変更履歴のテキストです。後半は更新時のコメントです。400文字程度に要約してください。誰が何をしたかの主語がわかるようにしてください。わからない時は詳細不明でもよいです。結論としてどうなったか、どういう状態にあるかを優先して記載してください。';
+const DEFAULT_TEAMS_TEMPLATE =
+  'これはTeamsチャットの{日数}日間の履歴です。トピックごとに経緯と今の状態を600文字程度に要約してください。誰が何をしたかわかるようにしてください。わからない時は詳細不明でもよいです。';
 
 const activeTab = ref<TabKey>('redmine');
 
@@ -84,7 +85,8 @@ async function saveTeams() {
     <label for="teams-template">定型文 / Template</label>
     <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
       AIチャットに送信する際にメッセージ履歴の前に追加される文章です。<br>
-      Text added before the Teams messages when sending to AI chat.
+      Text added before the Teams messages when sending to AI chat.<br>
+      <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">{日数}</code> と書くと、下の収集期間（日数）の設定値に自動的に置き換わります。
     </p>
     <textarea
       id="teams-template"

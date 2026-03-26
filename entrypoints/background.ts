@@ -7,9 +7,10 @@
 
 // デフォルトの定型文
 const DEFAULT_REDMINE_TEMPLATE =
-  'このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。';
+  'これはRedmineチケットの本文と変更履歴のテキストです。後半は更新時のコメントです。400文字程度に要約してください。誰が何をしたかの主語がわかるようにしてください。わからない時は詳細不明でもよいです。結論としてどうなったか、どういう状態にあるかを優先して記載してください。';
 
-const DEFAULT_TEAMS_TEMPLATE = '以下はTeamsチャットのメッセージ履歴です。要約してください。';
+const DEFAULT_TEAMS_TEMPLATE =
+  'これはTeamsチャットの{日数}日間の履歴です。トピックごとに経緯と今の状態を600文字程度に要約してください。誰が何をしたかわかるようにしてください。わからない時は詳細不明でもよいです。';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
 
@@ -26,9 +27,10 @@ async function handleMessage(message: unknown) {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
+    teamsPeriodDays: 14,
   });
 
-  const template =
+  let template =
     source === 'teams'
       ? typeof result.teamsTemplate === 'string'
         ? result.teamsTemplate
@@ -36,6 +38,12 @@ async function handleMessage(message: unknown) {
       : typeof result.template === 'string'
         ? result.template
         : DEFAULT_REDMINE_TEMPLATE;
+
+  // {日数} を実際の収集日数に置換（Teamsテンプレートのみ有効）
+  if (source === 'teams') {
+    const days = typeof result.teamsPeriodDays === 'number' ? result.teamsPeriodDays : 14;
+    template = template.replaceAll('{日数}', String(days));
+  }
 
   const fullText = template ? `${template}\n\n${content}` : content;
 
