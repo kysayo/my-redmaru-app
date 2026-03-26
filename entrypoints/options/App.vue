@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams';
-
-const DEFAULT_REDMINE_TEMPLATE =
-  'これはRedmineチケットの本文と変更履歴のテキストです。後半は更新時のコメントです。400文字程度に要約してください。誰が何をしたかの主語がわかるようにしてください。わからない時は詳細不明でもよいです。結論としてどうなったか、どういう状態にあるかを優先して記載してください。';
-const DEFAULT_TEAMS_TEMPLATE =
-  'これはTeamsチャットの{日数}日間の履歴です。トピックごとに経緯と今の状態を600文字程度に要約してください。誰が何をしたかわかるようにしてください。わからない時は詳細不明でもよいです。';
 
 const activeTab = ref<TabKey>('redmine');
 
