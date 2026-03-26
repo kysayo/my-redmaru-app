@@ -101,25 +101,16 @@ Teams は SPA のため、チャット切り替え時にページリロードが
 
 - 定型文をテキストエリアで編集・保存できる
 - ストレージキー: `template`
-- デフォルト: `このRedmineチケットを要約してください。後半は更新時のコメントです。コメントからも重要な推移があれば要約に含めてください。`
 
 #### Teams タブ
 
 - 定型文をテキストエリアで編集・保存できる
 - 収集期間（日数）を数値入力で設定できる（デフォルト: 14日、範囲: 1〜365）
 - ストレージキー: `teamsTemplate`, `teamsPeriodDays`
-- デフォルト定型文: `これはTeamsチャットの{日数}日間の履歴です。トピックごとに経緯と今の状態を600文字程度に要約してください。誰が何をしたかわかるようにしてください。わからない時は詳細不明でもよいです。`
 
 #### デフォルト定型文を変更する場合
 
-Redmine の定型文を変更する場合、以下の **2ファイル** の `DEFAULT_REDMINE_TEMPLATE` を同じ内容に揃える。
-
-| ファイル | 役割 |
-|---------|------|
-| `entrypoints/background.ts` | 未保存時の初期値 |
-| `entrypoints/options/App.vue` | 設定ページ表示時のデフォルト値 |
-
-Teams の定型文も同様に `DEFAULT_TEAMS_TEMPLATE` を揃える。
+`entrypoints/shared/defaults.ts` の `DEFAULT_REDMINE_TEMPLATE` / `DEFAULT_TEAMS_TEMPLATE` を編集する。このファイルが `background.ts` と `options/App.vue` の両方からインポートされているため、1箇所の変更で反映される。
 
 ---
 
@@ -135,6 +126,7 @@ Teams の定型文も同様に `DEFAULT_TEAMS_TEMPLATE` を揃える。
 | `entrypoints/aichat.content.ts` | Content Script（Isolated World） | AI チャット入力欄へのテキスト挿入 |
 | `entrypoints/background.ts` | Background Service Worker | メッセージ仲介・タブ管理・定型文結合 |
 | `entrypoints/options/` | Options Page（Vue 3） | Redmine / Teams 設定 UI（タブ切り替え） |
+| `entrypoints/shared/defaults.ts` | 共有モジュール | デフォルト定型文の定義（1箇所で管理） |
 
 ### メッセージプロトコル
 
