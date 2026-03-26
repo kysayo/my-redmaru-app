@@ -57,6 +57,16 @@ async function insertTextToChat(text: string) {
   }
 
   inputEl.focus();
+  if (inputEl instanceof HTMLTextAreaElement) {
+    inputEl.setSelectionRange(0, 0);
+  } else {
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.setStart(inputEl, 0);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
 }
 
 // 型ガード
