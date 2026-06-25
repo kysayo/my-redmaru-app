@@ -1,3 +1,6 @@
+import { parseIsouMapping } from './shared/isouMapping';
+import { DEFAULT_ISOU_FIELD_MAPPING } from './shared/defaults';
+
 /**
  * Marubeni Chatbot フォーカスモード Content Script
  *
@@ -19,12 +22,14 @@ export default defineContentScript({
       document.addEventListener('DOMContentLoaded', () => {
         injectFocusButton();
         injectScrollButton();
+        injectIsouButton();
         observeButtonRemoval();
         setupSpaNavigation();
       });
     } else {
       injectFocusButton();
       injectScrollButton();
+      injectIsouButton();
       observeButtonRemoval();
       setupSpaNavigation();
     }
@@ -87,6 +92,7 @@ const SELECTORS = {
 
 const BUTTON_ID = 'redmaru-focus-btn';
 const SCROLL_BUTTON_ID = 'redmaru-scroll-btn';
+const ISOU_BUTTON_ID = 'redmaru-isou-btn';
 
 // ボタンの共通スタイルを生成する
 function makeButtonStyle(bottom: number): string {
@@ -322,17 +328,76 @@ function observeButtonRemoval() {
   const observer = new MutationObserver(() => {
     const focusMissing = !document.getElementById(BUTTON_ID);
     const scrollMissing = !document.getElementById(SCROLL_BUTTON_ID);
-    if (focusMissing || scrollMissing) {
+    const isouMissing = !document.getElementById(ISOU_BUTTON_ID);
+    if (focusMissing || scrollMissing || isouMissing) {
       observer.disconnect();
       if (focusMissing) resetState();
       setTimeout(() => {
         injectFocusButton();
         injectScrollButton();
+        injectIsouButton();
         observeButtonRemoval();
       }, 500);
     }
   });
   observer.observe(document.body, { childList: true });
+}
+
+// ---- 移送申請ボタン ----
+
+function injectIsouButton() {
+  if (document.getElementById(ISOU_BUTTON_ID)) return;
+
+  const btn = document.createElement('button');
+  btn.id = ISOU_BUTTON_ID;
+  btn.title = '移送申請';
+  btn.innerHTML = getIsouIcon();
+  // フォーカスボタン(136px)のさらに上: 136 + 44 + 12 = 192px
+  btn.style.cssText = makeButtonStyle(192);
+
+  attachHoverEffect(btn, () => '0.7');
+  btn.addEventListener('click', openIsouForm);
+
+  document.body.appendChild(btn);
+}
+
+function getIsouIcon(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+    <polyline points="14 2 14 8 20 8"></polyline>
+    <line x1="16" y1="13" x2="8" y2="13"></line>
+    <line x1="16" y1="17" x2="8" y2="17"></line>
+    <polyline points="10 9 9 9 8 9"></polyline>
+  </svg>`;
+}
+
+function extractItem(text: string, key: string): string {
+  const regex = new RegExp(`【${key}】\\s*([\\s\\S]*?)(?=【|$)`);
+  const match = text.match(regex);
+  return match ? match[1].trim() : '';
+}
+
+async function openIsouForm() {
+  const responses = document.querySelectorAll('.segment-based-content');
+  if (responses.length === 0) {
+    alert('移送申請データの解析に失敗しました。チャット回答が表示されているか確認してください。');
+    return;
+  }
+  const text = responses[responses.length - 1].textContent ?? '';
+
+  const result = await browser.storage.sync.get({ isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING });
+  const mappingText = typeof result.isouFieldMapping === 'string' ? result.isouFieldMapping : DEFAULT_ISOU_FIELD_MAPPING;
+  const mapping = parseIsouMapping(mappingText);
+
+  const fields: Record<string, string> = {};
+  for (const { chatKey, formId } of mapping) {
+    fields[formId] = extractItem(text, chatKey);
+  }
+
+  const isoJiyu = extractItem(text, '移送事由');
+  const isoGaiyo = extractItem(text, '移送概要');
+
+  chrome.runtime.sendMessage({ type: 'OPEN_ISOU_FORM', payload: { fields, isoJiyu, isoGaiyo } });
 }
 
 // ---- SPA ナビゲーション対応 ----
@@ -349,6 +414,7 @@ function setupSpaNavigation() {
     setTimeout(() => {
       injectFocusButton();
       injectScrollButton();
+      injectIsouButton();
       observeButtonRemoval();
     }, 500);
   });

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING } from '../shared/defaults';
 
-type TabKey = 'redmine' | 'teams';
+type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr';
 
 const activeTab = ref<TabKey>('redmine');
 
@@ -15,15 +15,27 @@ const teamsTemplate = ref('');
 const teamsPeriodDays = ref(14);
 const teamsSaved = ref(false);
 
+// Redmine for TRタブの状態
+const redmineForTrTemplate = ref('');
+const redmineForTrSaved = ref(false);
+
+// 移送申請タブの状態
+const isouFieldMapping = ref('');
+const isouSaved = ref(false);
+
 onMounted(async () => {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
     teamsPeriodDays: 14,
+    redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
+    isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
   teamsPeriodDays.value = result.teamsPeriodDays as number;
+  redmineForTrTemplate.value = result.redmineForTrTemplate as string;
+  isouFieldMapping.value = result.isouFieldMapping as string;
 });
 
 async function saveRedmine() {
@@ -39,6 +51,22 @@ async function saveTeams() {
   });
   teamsSaved.value = true;
   setTimeout(() => { teamsSaved.value = false; }, 2000);
+}
+
+async function saveRedmineForTr() {
+  await browser.storage.sync.set({ redmineForTrTemplate: redmineForTrTemplate.value });
+  redmineForTrSaved.value = true;
+  setTimeout(() => { redmineForTrSaved.value = false; }, 2000);
+}
+
+async function saveIsou() {
+  await browser.storage.sync.set({ isouFieldMapping: isouFieldMapping.value });
+  isouSaved.value = true;
+  setTimeout(() => { isouSaved.value = false; }, 2000);
+}
+
+function resetIsouMapping() {
+  isouFieldMapping.value = DEFAULT_ISOU_FIELD_MAPPING;
 }
 </script>
 
@@ -59,6 +87,20 @@ async function saveTeams() {
       @click="activeTab = 'teams'"
     >
       Teams
+    </button>
+    <button
+      class="tab-btn"
+      :class="{ active: activeTab === 'redmine-tr' }"
+      @click="activeTab = 'redmine-tr'"
+    >
+      Redmine for TR
+    </button>
+    <button
+      class="tab-btn"
+      :class="{ active: activeTab === 'isou-tr' }"
+      @click="activeTab = 'isou-tr'"
+    >
+      移送申請フォーム
     </button>
   </nav>
 
@@ -109,5 +151,42 @@ async function saveTeams() {
     <br>
     <button @click="saveTeams">保存 / Save</button>
     <p v-if="teamsSaved" class="saved-msg">保存しました / Saved</p>
+  </section>
+
+  <section v-if="activeTab === 'redmine-tr'">
+    <label for="redmine-tr-template">定型文 / Template</label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      「for TR」ボタンでAIチャットに送信する際にチケット情報の前に追加される文章です。<br>
+      Text added before the ticket content when sending via the "for TR" button.
+    </p>
+    <textarea
+      id="redmine-tr-template"
+      v-model="redmineForTrTemplate"
+      rows="10"
+    />
+    <button @click="saveRedmineForTr">保存 / Save</button>
+    <p v-if="redmineForTrSaved" class="saved-msg">保存しました / Saved</p>
+  </section>
+
+  <section v-if="activeTab === 'isou-tr'">
+    <label for="isou-mapping">フォーム項目マッピング</label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      「移送申請」ボタンでチャット回答から移送申請フォームへ転記する項目を設定します。<br>
+      各行を <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">チャット項目名:フォームID:フォームタイプ</code> の形式で記入してください。<br>
+      フォームタイプは <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">input</code> または
+      <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">textarea</code>（省略時は input）。<br>
+      <strong>移送事由・移送概要・申請区分は専用ロジック</strong>のため、ここに記入しても反映されません。
+    </p>
+    <textarea
+      id="isou-mapping"
+      v-model="isouFieldMapping"
+      rows="10"
+      style="font-family: monospace;"
+    />
+    <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+      <button @click="saveIsou">保存 / Save</button>
+      <button @click="resetIsouMapping" style="background: #757575;">デフォルトに戻す</button>
+    </div>
+    <p v-if="isouSaved" class="saved-msg">保存しました / Saved</p>
   </section>
 </template>

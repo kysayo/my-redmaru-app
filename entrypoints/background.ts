@@ -5,15 +5,22 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE } from './shared/defaults';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
+const ISOU_FORM_URL = 'https://isouext.marubeni.co.jp/TAS/contents/transaction/T011.aspx';
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(handleMessage);
 });
 
 async function handleMessage(message: unknown) {
+  if (isOpenIsouFormMessage(message)) {
+    await browser.storage.local.set({ isouFormData: { fields: message.payload.fields, isoJiyu: message.payload.isoJiyu, isoGaiyo: message.payload.isoGaiyo, phase: 1 } });
+    await browser.tabs.create({ url: ISOU_FORM_URL });
+    return;
+  }
+
   if (!isOpenAiChatMessage(message)) return;
 
   const { content, source } = message.payload;
@@ -23,6 +30,7 @@ async function handleMessage(message: unknown) {
     template: DEFAULT_REDMINE_TEMPLATE,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
     teamsPeriodDays: 14,
+    redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
   });
 
   let template =
@@ -30,9 +38,13 @@ async function handleMessage(message: unknown) {
       ? typeof result.teamsTemplate === 'string'
         ? result.teamsTemplate
         : DEFAULT_TEAMS_TEMPLATE
-      : typeof result.template === 'string'
-        ? result.template
-        : DEFAULT_REDMINE_TEMPLATE;
+      : source === 'redmine-tr'
+        ? typeof result.redmineForTrTemplate === 'string'
+          ? result.redmineForTrTemplate
+          : DEFAULT_REDMINE_FOR_TR_TEMPLATE
+        : typeof result.template === 'string'
+          ? result.template
+          : DEFAULT_REDMINE_TEMPLATE;
 
   // {日数} を実際の収集日数に置換（Teamsテンプレートのみ有効）
   if (source === 'teams') {
@@ -64,8 +76,27 @@ interface OpenAiChatMessage {
   type: 'OPEN_AI_CHAT';
   payload: {
     content: string;
-    source: 'redmine' | 'teams';
+    source: 'redmine' | 'teams' | 'redmine-tr';
   };
+}
+
+interface OpenIsouFormMessage {
+  type: 'OPEN_ISOU_FORM';
+  payload: {
+    fields: Record<string, string>;
+    isoJiyu: string;
+    isoGaiyo: string;
+  };
+}
+
+function isOpenIsouFormMessage(msg: unknown): msg is OpenIsouFormMessage {
+  const m = msg as OpenIsouFormMessage;
+  return (
+    typeof m === 'object' &&
+    m !== null &&
+    m.type === 'OPEN_ISOU_FORM' &&
+    typeof m.payload?.fields === 'object'
+  );
 }
 
 function isOpenAiChatMessage(msg: unknown): msg is OpenAiChatMessage {
@@ -75,6 +106,6 @@ function isOpenAiChatMessage(msg: unknown): msg is OpenAiChatMessage {
     m !== null &&
     m.type === 'OPEN_AI_CHAT' &&
     typeof m.payload?.content === 'string' &&
-    (m.payload?.source === 'redmine' || m.payload?.source === 'teams')
+    (m.payload?.source === 'redmine' || m.payload?.source === 'teams' || m.payload?.source === 'redmine-tr')
   );
 }
