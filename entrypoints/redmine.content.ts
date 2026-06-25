@@ -10,42 +10,54 @@ export default defineContentScript({
   },
 });
 
+const BUTTON_STYLE = [
+  'margin-left: 8px',
+  'padding: 4px 12px',
+  'background-color: #2196F3',
+  'color: white',
+  'border: none',
+  'border-radius: 4px',
+  'cursor: pointer',
+  'font-size: 14px',
+  'display: inline-flex',
+  'align-items: center',
+  'gap: 6px',
+].join(';');
+
+const BUTTON_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="16" viewBox="0 0 26 16" role="img" aria-label="Send to AI chat" style="flex-shrink:0">
+  <rect x="0.75" y="0.75" width="24.5" height="14.5" rx="4" ry="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.2"/>
+  <path d="M3.2 8H9.0" fill="none" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M9.0 8L7.1 6.4M9.0 8L7.1 9.6" fill="none" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="16.0" cy="7.6" r="4.7" fill="none" stroke="#e11d2e" stroke-width="2.4"/>
+  <path d="M19.2 10.9L21.5 13.2" fill="none" stroke="#e11d2e" stroke-width="2.4" stroke-linecap="round"/>
+</svg>`;
+
 function injectButton() {
   // すでにボタンが注入済みの場合はスキップ
   if (document.getElementById('redmaru-send-btn')) return;
 
   const button = document.createElement('button');
   button.id = 'redmaru-send-btn';
-  button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="16" viewBox="0 0 26 16" role="img" aria-label="Send to AI chat" style="flex-shrink:0">
-  <rect x="0.75" y="0.75" width="24.5" height="14.5" rx="4" ry="4" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.2"/>
-  <path d="M3.2 8H9.0" fill="none" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M9.0 8L7.1 6.4M9.0 8L7.1 9.6" fill="none" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round"/>
-  <circle cx="16.0" cy="7.6" r="4.7" fill="none" stroke="#e11d2e" stroke-width="2.4"/>
-  <path d="M19.2 10.9L21.5 13.2" fill="none" stroke="#e11d2e" stroke-width="2.4" stroke-linecap="round"/>
-</svg>to MaruCha`;
-  button.style.cssText = [
-    'margin-left: 8px',
-    'padding: 4px 12px',
-    'background-color: #2196F3',
-    'color: white',
-    'border: none',
-    'border-radius: 4px',
-    'cursor: pointer',
-    'font-size: 14px',
-    'display: inline-flex',
-    'align-items: center',
-    'gap: 6px',
-  ].join(';');
+  button.innerHTML = `${BUTTON_ICON_SVG}to MaruCha`;
+  button.style.cssText = BUTTON_STYLE;
+  button.addEventListener('click', () => handleButtonClick('redmine'));
 
-  button.addEventListener('click', handleButtonClick);
+  const trButton = document.createElement('button');
+  trButton.id = 'redmaru-send-tr-btn';
+  trButton.innerHTML = `${BUTTON_ICON_SVG}for TR`;
+  trButton.style.cssText = BUTTON_STYLE;
+  trButton.addEventListener('click', () => handleButtonClick('redmine-tr'));
 
   // #content内のeditアイコン（ペンマーク）の直前（左）に挿入する
   const editIcon = document.querySelector<HTMLElement>('#content .contextual a.icon-edit');
   if (editIcon) {
-    editIcon.insertAdjacentElement('beforebegin', button);
+    editIcon.insertAdjacentElement('beforebegin', trButton);
+    trButton.insertAdjacentElement('beforebegin', button);
   } else {
     // フォールバック: #content直下h2の後
-    document.querySelector('#content h2')?.insertAdjacentElement('afterend', button);
+    const h2 = document.querySelector('#content h2');
+    h2?.insertAdjacentElement('afterend', trButton);
+    h2?.insertAdjacentElement('afterend', button);
   }
 }
 
@@ -114,13 +126,13 @@ async function getTicketInfo(): Promise<string> {
   return lines.join('\n');
 }
 
-async function handleButtonClick() {
+async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
     const ticketInfo = await getTicketInfo();
 
     await browser.runtime.sendMessage({
       type: 'OPEN_AI_CHAT',
-      payload: { content: ticketInfo, source: 'redmine' },
+      payload: { content: ticketInfo, source },
     });
   } catch (err) {
     console.error('[redmaru] エラー:', err);
