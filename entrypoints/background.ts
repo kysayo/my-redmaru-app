@@ -142,6 +142,7 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
       if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
       if (aichatTabId) await browser.tabs.remove(aichatTabId).catch(() => {});
+      await focusTab(redmineTabId);
       await notifyRedmineTab(redmineTabId, { requestId, status: 'done' });
     } catch (err) {
       // タブは残す（デバッグ用）
@@ -156,6 +157,19 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
 
   // 'timeout' | 'error'（aichat.content.ts側で発生。タブは残す）
   await notifyRedmineTab(redmineTabId, payload);
+}
+
+// AI回答更新の書き戻し成功時、複数のRedmineタブが開いていてもボタンを押した元タブが
+// 前面に来るようにする（Chromeはタブを閉じると既定でどこか別のタブにフォーカスが移る）。
+async function focusTab(tabId: number) {
+  try {
+    const tab = await browser.tabs.update(tabId, { active: true });
+    if (tab?.windowId !== undefined) {
+      await browser.windows.update(tab.windowId, { focused: true });
+    }
+  } catch {
+    // 元タブが閉じている場合等は無視
+  }
 }
 
 async function notifyRedmineTab(tabId: number, payload: AutoAnswerStatusMessage['payload']) {
