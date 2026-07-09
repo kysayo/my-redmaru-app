@@ -7,6 +7,7 @@ export default defineContentScript({
   matches: ['https://misol-dev.cloud.redmine.jp/issues/*'],
   main() {
     injectButton();
+    browser.runtime.onMessage.addListener(handleRuntimeMessage);
   },
 });
 
@@ -32,6 +33,8 @@ const BUTTON_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="26" heig
   <path d="M19.2 10.9L21.5 13.2" fill="none" stroke="#e11d2e" stroke-width="2.4" stroke-linecap="round"/>
 </svg>`;
 
+const AI_ANSWER_DEFAULT_LABEL = 'AI回答更新';
+
 function injectButton() {
   // すでにボタンが注入済みの場合はスキップ
   if (document.getElementById('redmaru-send-btn')) return;
@@ -48,26 +51,31 @@ function injectButton() {
   trButton.style.cssText = BUTTON_STYLE;
   trButton.addEventListener('click', () => handleButtonClick('redmine-tr'));
 
+  const aiAnswerButton = document.createElement('button');
+  aiAnswerButton.id = 'redmaru-ai-answer-btn';
+  aiAnswerButton.innerHTML = `${BUTTON_ICON_SVG}${AI_ANSWER_DEFAULT_LABEL}`;
+  aiAnswerButton.style.cssText = BUTTON_STYLE;
+  aiAnswerButton.addEventListener('click', () => handleAiAnswerButtonClick());
+
   // #content内のeditアイコン（ペンマーク）の直前（左）に挿入する
   const editIcon = document.querySelector<HTMLElement>('#content .contextual a.icon-edit');
   if (editIcon) {
-    editIcon.insertAdjacentElement('beforebegin', trButton);
+    editIcon.insertAdjacentElement('beforebegin', aiAnswerButton);
+    aiAnswerButton.insertAdjacentElement('beforebegin', trButton);
     trButton.insertAdjacentElement('beforebegin', button);
   } else {
     // フォールバック: #content直下h2の後
     const h2 = document.querySelector('#content h2');
+    h2?.insertAdjacentElement('afterend', aiAnswerButton);
     h2?.insertAdjacentElement('afterend', trButton);
     h2?.insertAdjacentElement('afterend', button);
   }
 }
 
-async function getTicketInfo(): Promise<string> {
-  const issueId = location.pathname.match(/\/issues\/(\d+)/)?.[1];
-  if (!issueId) throw new Error('チケットIDを取得できませんでした');
-
-  // Content ScriptはIsolated Worldで動作するためwindow.ViewCustomizeに直接アクセスできない。
-  // world:'MAIN'のredmine-bridge.content.tsにカスタムイベントでAPIキーを要求する。
-  const apiKey = await new Promise<string>((resolve, reject) => {
+// Content ScriptはIsolated Worldで動作するためwindow.ViewCustomizeに直接アクセスできない。
+// world:'MAIN'のredmine-bridge.content.tsにカスタムイベントでAPIキーを要求する。
+async function requestApiKey(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error('ViewCustomize.context.user.apiKey の取得がタイムアウトしました')),
       3000,
@@ -84,6 +92,16 @@ async function getTicketInfo(): Promise<string> {
     );
     document.dispatchEvent(new Event('redmaru:request-apikey'));
   });
+}
+
+function getIssueIdFromUrl(): string {
+  const issueId = location.pathname.match(/\/issues\/(\d+)/)?.[1];
+  if (!issueId) throw new Error('チケットIDを取得できませんでした');
+  return issueId;
+}
+
+async function getTicketInfo(apiKey: string): Promise<string> {
+  const issueId = getIssueIdFromUrl();
 
   const res = await fetch(`/issues/${issueId}.json?include=journals`, {
     headers: { 'X-Redmine-API-Key': apiKey },
@@ -128,7 +146,8 @@ async function getTicketInfo(): Promise<string> {
 
 async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
-    const ticketInfo = await getTicketInfo();
+    const apiKey = await requestApiKey();
+    const ticketInfo = await getTicketInfo(apiKey);
 
     await browser.runtime.sendMessage({
       type: 'OPEN_AI_CHAT',
@@ -138,4 +157,99 @@ async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
     console.error('[redmaru] エラー:', err);
     alert(`エラー: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+// AI回答自動更新ボタンの多重クリック防止用
+let inFlightRequestId: string | null = null;
+// 書き戻し完了後、次のクリックでページ再読み込みを行うかどうか（未保存の入力を消さないよう自動リロードはしない）
+let pendingReload = false;
+
+function setAiAnswerButtonState(state: 'idle' | 'sending' | 'waiting' | 'done' | 'timeout' | 'error', detail?: string) {
+  const btn = document.getElementById('redmaru-ai-answer-btn') as HTMLButtonElement | null;
+  if (!btn) return;
+
+  const labels: Record<typeof state, string> = {
+    idle: AI_ANSWER_DEFAULT_LABEL,
+    sending: '取得中...',
+    waiting: 'AI回答待ち...',
+    done: '更新完了（クリックで再読込）',
+    timeout: 'タイムアウト',
+    error: 'エラー',
+  };
+
+  btn.innerHTML = `${BUTTON_ICON_SVG}${labels[state]}`;
+  btn.disabled = state === 'sending' || state === 'waiting';
+  btn.title = state === 'error' && detail ? detail : '';
+}
+
+async function handleAiAnswerButtonClick() {
+  if (pendingReload) {
+    location.reload();
+    return;
+  }
+  if (inFlightRequestId) return;
+
+  try {
+    setAiAnswerButtonState('sending');
+    const issueId = getIssueIdFromUrl();
+    const apiKey = await requestApiKey();
+    const content = await getTicketInfo(apiKey);
+
+    const requestId = crypto.randomUUID();
+    inFlightRequestId = requestId;
+    setAiAnswerButtonState('waiting');
+
+    await browser.runtime.sendMessage({
+      type: 'AUTO_ANSWER_REQUEST',
+      payload: { requestId, issueId, apiKey, content },
+    });
+  } catch (err) {
+    console.error('[redmaru] AI回答更新エラー:', err);
+    inFlightRequestId = null;
+    setAiAnswerButtonState('error', err instanceof Error ? err.message : String(err));
+    setTimeout(() => setAiAnswerButtonState('idle'), 4000);
+  }
+}
+
+function handleRuntimeMessage(message: unknown) {
+  if (!isAutoAnswerStatusMessage(message)) return;
+  if (message.payload.requestId !== inFlightRequestId) return;
+
+  inFlightRequestId = null;
+
+  if (message.payload.status === 'done') {
+    // Redmineへの書き戻しは完了したが、ページ上の表示（カスタムフィールドの値）は
+    // サーバーレンダリングのため再読み込みしないと反映されない。90秒待つ間に
+    // ユーザーが同じタブでコメント入力等をしている可能性があるため自動リロードはせず、
+    // 次のクリックで再読み込みするボタンとして待機する。
+    pendingReload = true;
+    setAiAnswerButtonState('done');
+    return;
+  }
+
+  if (message.payload.status === 'timeout') {
+    setAiAnswerButtonState('timeout');
+  } else {
+    setAiAnswerButtonState('error', message.payload.message);
+  }
+  setTimeout(() => setAiAnswerButtonState('idle'), 4000);
+}
+
+interface AutoAnswerStatusMessage {
+  type: 'AUTO_ANSWER_STATUS';
+  payload:
+    | { requestId: string; status: 'done' }
+    | { requestId: string; status: 'timeout' }
+    | { requestId: string; status: 'error'; message: string };
+}
+
+function isAutoAnswerStatusMessage(msg: unknown): msg is AutoAnswerStatusMessage {
+  const m = msg as AutoAnswerStatusMessage;
+  return (
+    typeof m === 'object' &&
+    m !== null &&
+    m.type === 'AUTO_ANSWER_STATUS' &&
+    typeof m.payload?.requestId === 'string' &&
+    (m.payload?.status === 'done' || m.payload?.status === 'timeout' || m.payload?.status === 'error')
+  );
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE } from '../shared/defaults';
 
-type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr';
+type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
 const activeTab = ref<TabKey>('redmine');
 
@@ -23,6 +23,10 @@ const redmineForTrSaved = ref(false);
 const isouFieldMapping = ref('');
 const isouSaved = ref(false);
 
+// AI回答タブの状態
+const aiAnswerTemplate = ref('');
+const aiAnswerSaved = ref(false);
+
 onMounted(async () => {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
@@ -30,12 +34,14 @@ onMounted(async () => {
     teamsPeriodDays: 14,
     redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
     isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING,
+    aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
   teamsPeriodDays.value = result.teamsPeriodDays as number;
   redmineForTrTemplate.value = result.redmineForTrTemplate as string;
   isouFieldMapping.value = result.isouFieldMapping as string;
+  aiAnswerTemplate.value = result.aiAnswerTemplate as string;
 });
 
 async function saveRedmine() {
@@ -67,6 +73,12 @@ async function saveIsou() {
 
 function resetIsouMapping() {
   isouFieldMapping.value = DEFAULT_ISOU_FIELD_MAPPING;
+}
+
+async function saveAiAnswer() {
+  await browser.storage.sync.set({ aiAnswerTemplate: aiAnswerTemplate.value });
+  aiAnswerSaved.value = true;
+  setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
 }
 </script>
 
@@ -101,6 +113,13 @@ function resetIsouMapping() {
       @click="activeTab = 'isou-tr'"
     >
       移送申請フォーム
+    </button>
+    <button
+      class="tab-btn"
+      :class="{ active: activeTab === 'ai-answer' }"
+      @click="activeTab = 'ai-answer'"
+    >
+      AI回答
     </button>
   </nav>
 
@@ -188,5 +207,22 @@ function resetIsouMapping() {
       <button @click="resetIsouMapping" style="background: #757575;">デフォルトに戻す</button>
     </div>
     <p v-if="isouSaved" class="saved-msg">保存しました / Saved</p>
+  </section>
+
+  <section v-if="activeTab === 'ai-answer'">
+    <label for="ai-answer-template">定型文 / Template</label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      「AI回答更新」ボタンでAIチャットに送信する際にチケット情報の前に追加される文章です。<br>
+      AIの回答テキストはそのままRedmineのカスタムフィールド（cf_4589）に保存されるため、<br>
+      前置き・挨拶・Markdown装飾を避けた地の文で出力させる指示にしてください。<br>
+      Text added before the ticket content when sending via the "AI回答更新" button. The AI's raw response is stored directly into a Redmine custom field.
+    </p>
+    <textarea
+      id="ai-answer-template"
+      v-model="aiAnswerTemplate"
+      rows="6"
+    />
+    <button @click="saveAiAnswer">保存 / Save</button>
+    <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>
   </section>
 </template>

@@ -6,6 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Send2MaruCha',
     permissions: ['storage', 'tabs'],
+    host_permissions: ['https://misol-dev.cloud.redmine.jp/*'],
   },
   hooks: {
     'build:manifestGenerated': (_wxt, manifest) => {
