@@ -57,18 +57,28 @@ function injectButton() {
   aiAnswerButton.style.cssText = BUTTON_STYLE;
   aiAnswerButton.addEventListener('click', () => handleAiAnswerButtonClick());
 
-  // #content内のeditアイコン（ペンマーク）の直前（左）に挿入する
+  // to MaruCha / for TR は #content内のeditアイコン（ペンマーク）の直前（左）に挿入する
   const editIcon = document.querySelector<HTMLElement>('#content .contextual a.icon-edit');
   if (editIcon) {
-    editIcon.insertAdjacentElement('beforebegin', aiAnswerButton);
-    aiAnswerButton.insertAdjacentElement('beforebegin', trButton);
+    editIcon.insertAdjacentElement('beforebegin', trButton);
     trButton.insertAdjacentElement('beforebegin', button);
   } else {
     // フォールバック: #content直下h2の後
     const h2 = document.querySelector('#content h2');
-    h2?.insertAdjacentElement('afterend', aiAnswerButton);
     h2?.insertAdjacentElement('afterend', trButton);
     h2?.insertAdjacentElement('afterend', button);
+  }
+
+  // AI回答更新ボタンはcf_4589（AIまとめ）欄のすぐ下に挿入し、回答を記入する項目の近くで操作できるようにする
+  const aiAnswerField = document.querySelector<HTMLElement>('.cf_4589.attribute');
+  if (aiAnswerField) {
+    aiAnswerField.insertAdjacentElement('afterend', aiAnswerButton);
+  } else if (editIcon) {
+    // フォールバック: cf_4589欄が無いチケット（未回答でカスタムフィールド自体が非表示等）ではeditアイコンの左
+    editIcon.insertAdjacentElement('beforebegin', aiAnswerButton);
+  } else {
+    const h2 = document.querySelector('#content h2');
+    h2?.insertAdjacentElement('afterend', aiAnswerButton);
   }
 }
 
