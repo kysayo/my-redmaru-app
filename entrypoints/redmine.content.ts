@@ -51,12 +51,6 @@ function injectButton() {
   trButton.style.cssText = BUTTON_STYLE;
   trButton.addEventListener('click', () => handleButtonClick('redmine-tr'));
 
-  const aiAnswerButton = document.createElement('button');
-  aiAnswerButton.id = 'redmaru-ai-answer-btn';
-  aiAnswerButton.innerHTML = `${BUTTON_ICON_SVG}${AI_ANSWER_DEFAULT_LABEL}`;
-  aiAnswerButton.style.cssText = BUTTON_STYLE;
-  aiAnswerButton.addEventListener('click', () => handleAiAnswerButtonClick());
-
   // to MaruCha / for TR は #content内のeditアイコン（ペンマーク）の直前（左）に挿入する
   const editIcon = document.querySelector<HTMLElement>('#content .contextual a.icon-edit');
   if (editIcon) {
@@ -69,16 +63,17 @@ function injectButton() {
     h2?.insertAdjacentElement('afterend', button);
   }
 
-  // AI回答更新ボタンはcf_4589（AIまとめ）欄のすぐ下に挿入し、回答を記入する項目の近くで操作できるようにする
+  // AI回答更新ボタンはcf_4589（AIまとめ）欄のすぐ下に挿入する。
+  // このカスタムフィールドはトラッカーごとにRedmine側で表示/非表示が制御されているため、
+  // 欄が無いトラッカーではボタン自体を表示しない。
   const aiAnswerField = document.querySelector<HTMLElement>('.cf_4589.attribute');
   if (aiAnswerField) {
+    const aiAnswerButton = document.createElement('button');
+    aiAnswerButton.id = 'redmaru-ai-answer-btn';
+    aiAnswerButton.innerHTML = `${BUTTON_ICON_SVG}${AI_ANSWER_DEFAULT_LABEL}`;
+    aiAnswerButton.style.cssText = BUTTON_STYLE;
+    aiAnswerButton.addEventListener('click', () => handleAiAnswerButtonClick());
     aiAnswerField.insertAdjacentElement('afterend', aiAnswerButton);
-  } else if (editIcon) {
-    // フォールバック: cf_4589欄が無いチケット（未回答でカスタムフィールド自体が非表示等）ではeditアイコンの左
-    editIcon.insertAdjacentElement('beforebegin', aiAnswerButton);
-  } else {
-    const h2 = document.querySelector('#content h2');
-    h2?.insertAdjacentElement('afterend', aiAnswerButton);
   }
 }
 
