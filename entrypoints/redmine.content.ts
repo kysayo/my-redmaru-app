@@ -117,6 +117,7 @@ async function getTicketInfo(apiKey: string): Promise<string> {
 
   const lines: string[] = [
     `チケット #${issue.id}: ${issue.subject}`,
+    `プロジェクト: ${issue.project?.name ?? ''}`,
     `トラッカー: ${issue.tracker?.name ?? ''}`,
     `ステータス: ${issue.status?.name ?? ''}`,
     `優先度: ${issue.priority?.name ?? ''}`,
