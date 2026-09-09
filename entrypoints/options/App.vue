@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -25,6 +25,7 @@ const isouSaved = ref(false);
 
 // AI回答タブの状態
 const aiAnswerTemplate = ref('');
+const aiAnswerClosedTemplate = ref('');
 const aiAnswerSaved = ref(false);
 
 onMounted(async () => {
@@ -35,6 +36,7 @@ onMounted(async () => {
     redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
     isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING,
     aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
+    aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
@@ -42,6 +44,7 @@ onMounted(async () => {
   redmineForTrTemplate.value = result.redmineForTrTemplate as string;
   isouFieldMapping.value = result.isouFieldMapping as string;
   aiAnswerTemplate.value = result.aiAnswerTemplate as string;
+  aiAnswerClosedTemplate.value = result.aiAnswerClosedTemplate as string;
 });
 
 async function saveRedmine() {
@@ -76,7 +79,10 @@ function resetIsouMapping() {
 }
 
 async function saveAiAnswer() {
-  await browser.storage.sync.set({ aiAnswerTemplate: aiAnswerTemplate.value });
+  await browser.storage.sync.set({
+    aiAnswerTemplate: aiAnswerTemplate.value,
+    aiAnswerClosedTemplate: aiAnswerClosedTemplate.value,
+  });
   aiAnswerSaved.value = true;
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
 }
@@ -210,18 +216,33 @@ async function saveAiAnswer() {
   </section>
 
   <section v-if="activeTab === 'ai-answer'">
-    <label for="ai-answer-template">定型文 / Template</label>
-    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+    <p style="font-size: 13px; color: #666; margin: 4px 0 16px;">
       「AI回答更新」ボタンでAIチャットに送信する際にチケット情報の前に追加される文章です。<br>
       AIの回答テキストはそのままRedmineのカスタムフィールド（cf_4589）に保存されるため、<br>
       前置き・挨拶・Markdown装飾を避けた地の文で出力させる指示にしてください。<br>
+      チケットのステータスが<strong>クローズ扱い</strong>（Redmineのステータス設定の「終了」フラグ）かどうかで、下の2つの定型文を自動的に使い分けます。<br>
       Text added before the ticket content when sending via the "AI回答更新" button. The AI's raw response is stored directly into a Redmine custom field.
     </p>
+
+    <label for="ai-answer-template">定型文（オープン中のチケット）/ Template (open)</label>
     <textarea
       id="ai-answer-template"
       v-model="aiAnswerTemplate"
       rows="6"
     />
+
+    <label for="ai-answer-closed-template" style="margin-top: 16px;">
+      定型文（クローズ済みのチケット）/ Template (closed)
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      対応が完了している前提のまとめ方（段落構成の指定など）を指示できます。
+    </p>
+    <textarea
+      id="ai-answer-closed-template"
+      v-model="aiAnswerClosedTemplate"
+      rows="10"
+    />
+
     <button @click="saveAiAnswer">保存 / Save</button>
     <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>
   </section>

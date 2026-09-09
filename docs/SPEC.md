@@ -91,7 +91,14 @@ Teams は SPA のため、チャット切り替え時にページリロードが
 
 Redmineチケットページの「AI回答更新」ボタンをクリックすると、AIチャットへの送信・回答完了待ち・Redmineへの書き戻しまでを自動で行う。人間による送信前後の確認ゲートは設けない。`cf_4589`（AIまとめ）欄が無いトラッカーではボタンごと非表示になる。
 
-- プロンプトは設定ページの「AI回答」タブで変更可能（ストレージキー: `aiAnswerTemplate`）。AIの回答テキストはそのままRedmineのカスタムフィールドに保存されるため、前置き・挨拶・Markdown装飾を避けた地の文で出力させる専用の定型文を用いる。
+- プロンプトは設定ページの「AI回答」タブで変更可能。AIの回答テキストはそのままRedmineのカスタムフィールドに保存されるため、前置き・挨拶・Markdown装飾を避けた地の文で出力させる専用の定型文を用いる。
+- **チケットのステータスによるプロンプト切り替え**: クローズ扱いのステータスかどうかで2種類の定型文を使い分ける（ストレージキー: オープン中は `aiAnswerTemplate`、クローズ済みは `aiAnswerClosedTemplate`）。対応中のチケットは経緯の要約、対応完了済みのチケットは「問い合わせ概要／事象／原因／影響範囲／対応内容／ユーザ対応／結果」のような確定事項の報告としてまとめたいという要求の違いによる。切り替え対象はこのAIまとめ欄の更新のみで、「to MaruCha」「for TR」ボタンは従来どおり単一の定型文を使う。
+  - **クローズ判定**: `redmine.content.ts` の `isClosedIssue()` が判定し、結果を `AUTO_ANSWER_REQUEST` の `isClosed` に載せて `background.ts` に渡す（`background.ts` で判定させるとチケットJSONの再取得が必要になるため、既にJSONを持っている content script 側で判定する）。
+    1. `GET /issues/{id}.json` のレスポンスに `issue.status.is_closed`（boolean）があればそれを使う
+    2. 無ければ `GET /issue_statuses.json` を取得し、`is_closed: true` のステータスIDに `issue.status.id` が含まれるかで判定する（`is_closed` はRedmineのバージョンによっては返らないため、フォールバックが必要。別リポジトリ `view-customize` の `src/script_01.txt` / `src/script_06.txt` と同じ判定方法）
+    3. 判定に失敗した場合（APIエラー等）は `console.warn` を出したうえで**未クローズ扱い＝オープン用プロンプトで続行**する。要約自体は成立するため、Playwrightバッチが1件のAPIエラーで止まらないことを優先する
+  - APIキーは既存の `ViewCustomize.context.user.apiKey`（MAIN World ブリッジ経由）をそのまま使う。`/issue_statuses.json` の取得に管理者権限は不要。
+  - `/issue_statuses.json` はボタンのクリック時にのみ取得する（ページ表示のたびではない）。レスポンスが小さく、後続のAI回答生成（最大90秒）に比べて無視できるコストのためキャッシュはしない。
 - **ステートレス・リレー方式**: `background.ts` は状態を持たず、`requestId`（`crypto.randomUUID()`）と送信元タブID（`redmineTabId`）をメッセージペイロードに載せて運ぶことで、Service Workerが休止・再起動しても処理を継続できる設計にしている。回答生成待ち（最大90秒）はタブに紐づいて生存する `aichat.content.ts` 側で行う。
 - **自動送信・完了検知・回答抽出**: `aichat.content.ts` が `entrypoints/shared/aichatDom.ts` の関数を使い、テキスト挿入後にメッセージを送信し、回答完了を検知する。タイムアウト時は書き込みを行わない（誤って古い/中途半端な回答を書き込む方が害が大きいため）。
   - **送信**: `submitMessage()` がまず入力欄に対して**Ctrl+Enterのキー操作**（`keydown`/`keypress`/`keyup`）をシミュレートする（実サイトの入力欄プレースホルダーが「Ctrl + Enterキーを押して送信」と明記しており、devtools実機確認でもこちらが確実に動作した）。送信後500ms待って入力欄が空になっていれば成功とみなす。空にならない場合のみ、送信ボタン（`svg[data-testid="SendIcon"]` を持つ `button[type="submit"]`、テキストを挿入した入力欄と同じ`<form>`内を優先して検索）のクリックにフォールバックする。
@@ -194,8 +201,9 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 #### AI回答 タブ
 
-- 「AI回答更新」ボタン用の定型文をテキストエリアで編集・保存できる
-- ストレージキー: `aiAnswerTemplate`
+- 「AI回答更新」ボタン用の定型文を2つ（オープン中のチケット用・クローズ済みのチケット用）テキストエリアで編集・保存できる。保存ボタンは1つで両方をまとめて保存する
+- どちらが使われるかはチケットのステータスがクローズ扱いかどうかで自動的に決まる（「AI回答自動更新」節参照）
+- ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`
 
 #### デフォルト値を変更する場合
 
@@ -207,7 +215,8 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `DEFAULT_TEAMS_TEMPLATE` | Teams 定型文 |
 | `DEFAULT_REDMINE_FOR_TR_TEMPLATE` | Redmine for TR 定型文 |
 | `DEFAULT_ISOU_FIELD_MAPPING` | 移送申請フォームマッピング |
-| `DEFAULT_AI_ANSWER_TEMPLATE` | AI回答自動更新 定型文 |
+| `DEFAULT_AI_ANSWER_TEMPLATE` | AI回答自動更新 定型文（オープン中のチケット） |
+| `DEFAULT_AI_ANSWER_CLOSED_TEMPLATE` | AI回答自動更新 定型文（クローズ済みのチケット） |
 
 ---
 
@@ -217,7 +226,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 | ファイル | 種別 | 説明 |
 |---------|------|------|
-| `entrypoints/redmine.content.ts` | Content Script（Isolated World） | ボタン注入・チケット情報取得・メッセージ送信 |
+| `entrypoints/redmine.content.ts` | Content Script（Isolated World） | ボタン注入・チケット情報取得・クローズ判定・メッセージ送信 |
 | `entrypoints/redmine-bridge.content.ts` | Content Script（MAIN World） | ViewCustomize から API キーを取得し Isolated World に渡す |
 | `entrypoints/teams.content.ts` | Content Script（Isolated World） | ボタン注入・メッセージ収集・仮想スクロール対応 |
 | `entrypoints/aichat.content.ts` | Content Script（Isolated World） | AI チャット入力欄へのテキスト挿入 |
@@ -259,7 +268,8 @@ interface AutoAnswerRequestMessage {
     requestId: string;   // crypto.randomUUID()
     issueId: string;
     apiKey: string;
-    content: string;     // getTicketInfo() の戻り値
+    content: string;     // formatTicketInfo() の戻り値
+    isClosed?: boolean;  // クローズ扱いのステータスか（定型文の切り替えに使用）
   };
 }
 ```
@@ -276,7 +286,7 @@ interface AutoAnswerStartMessage {
   type: 'AUTO_ANSWER_START';
   payload: {
     requestId: string;
-    text: string;         // aiAnswerTemplate + '\n\n' + content
+    text: string;         // aiAnswerTemplate（またはaiAnswerClosedTemplate） + '\n\n' + content
     issueId: string;
     apiKey: string;
     redmineTabId: number; // ステートレス中継のため運ぶ
@@ -336,8 +346,9 @@ interface AutoAnswerStatusMessage {
 [Redmineページ]（AI回答自動更新）
   └─「AI回答更新」ボタンクリック
       ├─ APIキー取得・チケット情報取得（既存フローと同じ）
-      └─ background.ts へ AUTO_ANSWER_REQUEST 送信 (requestId, issueId, apiKey, content)
-           ├─ aiAnswerTemplate を取得して結合
+      ├─ クローズ判定（issue.status.is_closed → 無ければ /issue_statuses.json）
+      └─ background.ts へ AUTO_ANSWER_REQUEST 送信 (requestId, issueId, apiKey, content, isClosed)
+           ├─ isClosed に応じて aiAnswerTemplate / aiAnswerClosedTemplate を取得して結合
            └─ AIチャット新規タブ → AUTO_ANSWER_START 送信 (text, issueId, apiKey, redmineTabId)
                 ├─ insertTextToChat（既存関数を流用）
                 ├─ 送信ボタンをクリック
@@ -361,7 +372,8 @@ interface AutoAnswerStatusMessage {
 | `teamsPeriodDays` | number | Teams 収集期間（日数） | 14 |
 | `redmineForTrTemplate` | string | Redmine for TR 定型文 | `shared/defaults.ts` 参照 |
 | `isouFieldMapping` | string | 移送申請フォームマッピング（行形式） | `shared/defaults.ts` 参照 |
-| `aiAnswerTemplate` | string | AI回答自動更新 定型文 | `shared/defaults.ts` 参照 |
+| `aiAnswerTemplate` | string | AI回答自動更新 定型文（オープン中のチケット） | `shared/defaults.ts` 参照 |
+| `aiAnswerClosedTemplate` | string | AI回答自動更新 定型文（クローズ済みのチケット） | `shared/defaults.ts` 参照 |
 
 **chrome.storage.local**（処理中の一時データ）
 

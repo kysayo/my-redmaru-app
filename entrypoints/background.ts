@@ -5,7 +5,7 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -86,16 +86,23 @@ async function handleMessage(message: unknown, sender: Browser.runtime.MessageSe
 
 async function handleAutoAnswerRequest(payload: AutoAnswerRequestMessage['payload'], sender: Browser.runtime.MessageSender) {
   const redmineTabId = sender.tab?.id;
-  console.log('[redmaru] AUTO_ANSWER_REQUEST受信', { redmineTabId, issueId: payload.issueId });
+  console.log('[redmaru] AUTO_ANSWER_REQUEST受信', { redmineTabId, issueId: payload.issueId, isClosed: payload.isClosed });
   if (!redmineTabId) {
     console.error('[redmaru] 送信元のRedmineタブIDを取得できませんでした');
     return;
   }
 
-  const { requestId, issueId, apiKey, content } = payload;
+  const { requestId, issueId, apiKey, content, isClosed } = payload;
 
-  const result = await browser.storage.sync.get({ aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE });
-  const template = typeof result.aiAnswerTemplate === 'string' ? result.aiAnswerTemplate : DEFAULT_AI_ANSWER_TEMPLATE;
+  // クローズ扱いのステータスかどうかで定型文を切り替える（判定はredmine.content.ts側で行う）
+  const result = await browser.storage.sync.get({
+    aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
+    aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
+  });
+  const stored = isClosed ? result.aiAnswerClosedTemplate : result.aiAnswerTemplate;
+  const fallback = isClosed ? DEFAULT_AI_ANSWER_CLOSED_TEMPLATE : DEFAULT_AI_ANSWER_TEMPLATE;
+  const template = typeof stored === 'string' ? stored : fallback;
+  console.log('[redmaru] 使用する定型文:', isClosed ? 'aiAnswerClosedTemplate（クローズ済み）' : 'aiAnswerTemplate（オープン）');
   const fullText = template ? `${template}\n\n${content}` : content;
 
   const tab = await browser.tabs.create({ url: AI_CHAT_URL });
@@ -226,6 +233,8 @@ interface AutoAnswerRequestMessage {
     issueId: string;
     apiKey: string;
     content: string;
+    // クローズ扱いのステータスかどうか。古いcontent scriptが残っている場合に備えて省略可能
+    isClosed?: boolean;
   };
 }
 

@@ -105,7 +105,22 @@ function getIssueIdFromUrl(): string {
   return issueId;
 }
 
-async function getTicketInfo(apiKey: string): Promise<string> {
+// チケットJSONのうち本スクリプトで参照する部分だけを型として持つ
+interface RedmineIssue {
+  id: number;
+  subject: string;
+  status?: { id: number; name: string; is_closed?: boolean };
+  project?: { name: string };
+  tracker?: { name: string };
+  priority?: { name: string };
+  assigned_to?: { name: string };
+  author?: { name: string };
+  description?: string;
+  custom_fields?: { id: number; name: string; value: unknown }[];
+  journals?: { notes: string; user?: { name: string } }[];
+}
+
+async function fetchIssue(apiKey: string): Promise<RedmineIssue> {
   const issueId = getIssueIdFromUrl();
 
   const res = await fetch(`/issues/${issueId}.json?include=journals`, {
@@ -114,7 +129,41 @@ async function getTicketInfo(apiKey: string): Promise<string> {
   if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
   const { issue } = await res.json();
+  return issue;
+}
 
+// チケットがクローズ扱いのステータスかどうかを判定する。
+// issue.status.is_closed はRedmineのバージョンによっては返らないため、
+// 返らない場合は /issue_statuses.json からクローズ扱いのステータスIDを引く
+// （view-customize リポジトリの script_01.txt / script_06.txt と同じ判定方法）。
+// 判定に失敗した場合は未クローズ扱いで続行する（AI回答の生成自体は成立するため、
+// バッチ実行が1件のAPIエラーで止まらないことを優先する）。
+async function isClosedIssue(issue: RedmineIssue, apiKey: string): Promise<boolean> {
+  if (typeof issue.status?.is_closed === 'boolean') return issue.status.is_closed;
+
+  const statusId = issue.status?.id;
+  if (statusId === undefined) {
+    console.warn('[redmaru] チケットのステータスIDが取得できないため未クローズ扱いにします');
+    return false;
+  }
+
+  try {
+    const res = await fetch('/issue_statuses.json', {
+      headers: { 'X-Redmine-API-Key': apiKey },
+    });
+    if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
+
+    const { issue_statuses } = await res.json();
+    return (issue_statuses ?? []).some(
+      (s: { id: number; is_closed?: boolean }) => s.id === statusId && s.is_closed,
+    );
+  } catch (err) {
+    console.warn('[redmaru] クローズ判定に失敗したため未クローズ扱いにします:', err);
+    return false;
+  }
+}
+
+function formatTicketInfo(issue: RedmineIssue): string {
   const lines: string[] = [
     `チケット #${issue.id}: ${issue.subject}`,
     `プロジェクト: ${issue.project?.name ?? ''}`,
@@ -153,7 +202,7 @@ async function getTicketInfo(apiKey: string): Promise<string> {
 async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
     const apiKey = await requestApiKey();
-    const ticketInfo = await getTicketInfo(apiKey);
+    const ticketInfo = formatTicketInfo(await fetchIssue(apiKey));
 
     await browser.runtime.sendMessage({
       type: 'OPEN_AI_CHAT',
@@ -199,7 +248,10 @@ async function handleAiAnswerButtonClick() {
     setAiAnswerButtonState('sending');
     const issueId = getIssueIdFromUrl();
     const apiKey = await requestApiKey();
-    const content = await getTicketInfo(apiKey);
+    const issue = await fetchIssue(apiKey);
+    const content = formatTicketInfo(issue);
+    // クローズ済みチケットは別の定型文（完了報告向け）でまとめさせる
+    const isClosed = await isClosedIssue(issue, apiKey);
 
     const requestId = crypto.randomUUID();
     inFlightRequestId = requestId;
@@ -207,7 +259,7 @@ async function handleAiAnswerButtonClick() {
 
     await browser.runtime.sendMessage({
       type: 'AUTO_ANSWER_REQUEST',
-      payload: { requestId, issueId, apiKey, content },
+      payload: { requestId, issueId, apiKey, content, isClosed },
     });
   } catch (err) {
     console.error('[redmaru] AI回答更新エラー:', err);
