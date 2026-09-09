@@ -88,12 +88,23 @@ export function isGenerating(): boolean {
   return false;
 }
 
-/** 回答コンテナの末尾要素（最新の回答）のテキストを返す */
+/**
+ * 回答コンテナの末尾要素（最新の回答）のテキストを返す。
+ *
+ * textContentではなくinnerTextを使う。回答はMarkdownをレンダリングしたHTML
+ * （<p>・<li>・<br>等）で表示されており、段落の区切りは要素の構造で表現されていて
+ * テキストノード自体には改行文字が入っていない。textContentは要素の境界を無視して
+ * 生のテキストノードを連結するため、Redmineに書き戻した回答から改行が消えてしまう
+ * （手動で画面から選択・コピーした場合はブラウザがinnerText相当を返すため改行が残る）。
+ * innerTextはレンダリング結果に基づき、ブロック要素の境界で改行が入る。
+ */
 export function getLatestAnswerText(): string | null {
   for (const sel of SELECTORS.answerContainer) {
     const nodes = document.querySelectorAll<HTMLElement>(sel);
     if (nodes.length > 0) {
-      return nodes[nodes.length - 1].textContent ?? '';
+      const el = nodes[nodes.length - 1];
+      // innerTextは要素が非表示だとtextContent相当になるため、念のためフォールバックを残す
+      return (el.innerText || el.textContent || '').trim();
     }
   }
   return null;
