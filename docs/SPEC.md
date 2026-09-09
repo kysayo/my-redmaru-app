@@ -28,6 +28,7 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
 - ボタンクリックで以下の情報を Redmine API（`/issues/{id}.json?include=journals`）で取得する
   - チケット ID・件名・プロジェクト・トラッカー・ステータス・優先度・担当者・作成者
     - プロジェクト名はチケットの属性欄ではなくページ上部のパンくずに表示されるが、API レスポンスの `project.name` から取得できるため DOM は参照しない
+    - **チケットURL（`{origin}/issues/{id}`）は「for TR」ボタンのときだけ含める**。移送申請の定型文が複数の項目でチケットURLの出力を求めており、AIは社内RedmineのURLを知らないため渡さないと架空のURLを作ってしまう。一方でAI回答（`cf_4589`）の要約にURLが紛れ込むのは避けたいため、`formatTicketInfo()` の `includeUrl` オプションで送信元ごとに切り替える
   - 説明文
   - カスタムフィールド（値が空のものは除外）
   - コメント（journals のうち notes が空でないもの）

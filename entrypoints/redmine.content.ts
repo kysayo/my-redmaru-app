@@ -163,14 +163,20 @@ async function isClosedIssue(issue: RedmineIssue, apiKey: string): Promise<boole
   }
 }
 
-function formatTicketInfo(issue: RedmineIssue): string {
-  const lines: string[] = [
-    `チケット #${issue.id}: ${issue.subject}`,
+function formatTicketInfo(issue: RedmineIssue, options: { includeUrl?: boolean } = {}): string {
+  const lines: string[] = [`チケット #${issue.id}: ${issue.subject}`];
+
+  // 「for TR」の定型文は移送申請の各項目でチケットURLを出力させるため、URLを明示的に渡す。
+  // AIは社内RedmineのURLを知らないので、渡さないと出力できないか架空のURLを作ってしまう。
+  // AI回答（cf_4589）の要約にURLが紛れ込むのは避けたいため、それ以外のボタンでは含めない。
+  if (options.includeUrl) lines.push(`URL: ${location.origin}/issues/${issue.id}`);
+
+  lines.push(
     `プロジェクト: ${issue.project?.name ?? ''}`,
     `トラッカー: ${issue.tracker?.name ?? ''}`,
     `ステータス: ${issue.status?.name ?? ''}`,
     `優先度: ${issue.priority?.name ?? ''}`,
-  ];
+  );
   if (issue.assigned_to) lines.push(`担当者: ${issue.assigned_to.name}`);
   if (issue.author) lines.push(`作成者: ${issue.author.name}`);
 
@@ -202,7 +208,9 @@ function formatTicketInfo(issue: RedmineIssue): string {
 async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
     const apiKey = await requestApiKey();
-    const ticketInfo = formatTicketInfo(await fetchIssue(apiKey));
+    const ticketInfo = formatTicketInfo(await fetchIssue(apiKey), {
+      includeUrl: source === 'redmine-tr',
+    });
 
     await browser.runtime.sendMessage({
       type: 'OPEN_AI_CHAT',
