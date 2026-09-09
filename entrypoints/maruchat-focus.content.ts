@@ -378,12 +378,16 @@ function extractItem(text: string, key: string): string {
 }
 
 async function openIsouForm() {
-  const responses = document.querySelectorAll('.segment-based-content');
+  const responses = document.querySelectorAll<HTMLElement>('.segment-based-content');
   if (responses.length === 0) {
     alert('移送申請データの解析に失敗しました。チャット回答が表示されているか確認してください。');
     return;
   }
-  const text = responses[responses.length - 1].textContent ?? '';
+  // textContentではなくinnerTextを使う（理由は shared/aichatDom.ts の getLatestAnswerText を参照）。
+  // 【項目名】区切りの抽出自体は改行が無くても動くが、textContentでは「対応作業」のような
+  // 複数行の項目が改行の消えた1本のテキストとして移送申請フォームに転記されてしまう。
+  const latest = responses[responses.length - 1];
+  const text = (latest.innerText || latest.textContent || '').trim();
 
   const result = await browser.storage.sync.get({ isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING });
   const mappingText = typeof result.isouFieldMapping === 'string' ? result.isouFieldMapping : DEFAULT_ISOU_FIELD_MAPPING;
