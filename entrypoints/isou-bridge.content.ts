@@ -6,7 +6,7 @@
  */
 
 export default defineContentScript({
-  matches: ['https://isouext.marubeni.co.jp/*'],
+  matches: ['https://mrint.marubeni.co.jp/*'],
   world: 'MAIN',
   runAt: 'document_idle',
   main() {

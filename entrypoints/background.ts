@@ -9,7 +9,7 @@ import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_T
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
-const ISOU_FORM_URL = 'https://isouext.marubeni.co.jp/TAS/contents/transaction/T011.aspx';
+const ISOU_FORM_URL = 'https://mrint.marubeni.co.jp/TAS/contents/transaction/T011.aspx';
 const REDMINE_BASE_URL = 'https://misol-dev.cloud.redmine.jp';
 const AI_ANSWER_CUSTOM_FIELDS = { updatedAt: 4588, answer: 4589 };
 
@@ -19,7 +19,7 @@ export default defineBackground(() => {
 
 async function handleMessage(message: unknown, sender: Browser.runtime.MessageSender) {
   if (isOpenIsouFormMessage(message)) {
-    await browser.storage.local.set({ isouFormData: { fields: message.payload.fields, isoJiyu: message.payload.isoJiyu, isoGaiyo: message.payload.isoGaiyo, phase: 1 } });
+    await browser.storage.local.set({ isouFormData: { fields: message.payload.fields, isoGaiyo: message.payload.isoGaiyo, phase: 1 } });
     await browser.tabs.create({ url: ISOU_FORM_URL });
     return;
   }
@@ -200,7 +200,6 @@ interface OpenIsouFormMessage {
   type: 'OPEN_ISOU_FORM';
   payload: {
     fields: Record<string, string>;
-    isoJiyu: string;
     isoGaiyo: string;
   };
 }

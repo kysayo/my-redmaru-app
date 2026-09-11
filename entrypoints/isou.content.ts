@@ -2,7 +2,7 @@ import { parseIsouMapping } from './shared/isouMapping';
 import { DEFAULT_ISOU_FIELD_MAPPING } from './shared/defaults';
 
 export default defineContentScript({
-  matches: ['https://isouext.marubeni.co.jp/*'],
+  matches: ['https://mrint.marubeni.co.jp/*'],
   async main() {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initIsouForm);
@@ -14,11 +14,12 @@ export default defineContentScript({
 
 interface IsouFormData {
   fields: Record<string, string>;
-  isoJiyu: string;
   isoGaiyo: string;
   phase: 1 | 2;
 }
 
+// 移送事由の選択肢とselectのvalueの対応（申請区分と同様、常に「プログラム改善」固定のため
+// AIには出力させずコードで直接指定する。他の選択肢は将来また選択式に戻す場合の参考として残す）
 const ISO_JIYU_MAP: Record<string, string> = {
   '新規': '01',
   '条件変更（仕様変更）': '02',
@@ -29,6 +30,7 @@ const ISO_JIYU_MAP: Record<string, string> = {
   'プログラムミス（メンテ時）': '07',
   'その他': '08',
 };
+const FIXED_ISO_JIYU = 'プログラム改善';
 
 const ISO_GAIYO_MAP: Record<string, string> = {
   'プログラム移送': 'chkIsoGaiyo1',
@@ -70,7 +72,7 @@ async function runPhase2(formData: IsouFormData) {
     }
   }
 
-  setSelectValue('drpIsoJiyu', ISO_JIYU_MAP[formData.isoJiyu] ?? '');
+  setSelectValue('drpIsoJiyu', ISO_JIYU_MAP[FIXED_ISO_JIYU] ?? '');
   setCheckboxes(formData.isoGaiyo);
 
   await browser.storage.local.remove('isouFormData');

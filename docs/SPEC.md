@@ -11,7 +11,7 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
 | Redmine（送信側） | `https://misol-dev.cloud.redmine.jp/issues/*` |
 | Teams（送信側） | `https://teams.microsoft.com/*` |
 | AI チャット（受信側・ボタン注入） | `https://www.marubeni-chatbot.com/*` |
-| 移送申請フォーム（転記先） | `https://isouext.marubeni.co.jp/TAS/contents/transaction/T011.aspx` |
+| 移送申請フォーム（転記先） | `https://mrint.marubeni.co.jp/TAS/contents/transaction/T011.aspx`（旧URL: `https://isouext.marubeni.co.jp/...`、2026年9月に変更） |
 
 ---
 
@@ -123,7 +123,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 - MaruCha 画面の右下に「拡大縮小」「末尾へ移動」と並んで「移送申請」ボタン（`bottom: 192px`）を注入する
 - ボタンクリック時、画面内の最後のチャット回答（`.segment-based-content` の末尾要素）を取得し、設定ページのマッピングに従って各項目を抽出する
   - テキストの取得には `innerText` を使う（`textContent` では「対応作業」のような複数行の項目から改行が消える。理由は「AI回答自動更新」節の「回答抽出」を参照）
-- 抽出した項目と固定処理が必要な移送事由・移送概要を `OPEN_ISOU_FORM` メッセージで Background に送信する
+- 抽出した項目と固定処理が必要な移送概要を `OPEN_ISOU_FORM` メッセージで Background に送信する（移送事由はAIに出力させず、`isou.content.ts` 側で「プログラム改善」に固定する）
 
 ### 移送申請フォーム側（自動入力）
 
@@ -145,7 +145,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 1. Postback 後の再ロードで Content Script が再実行される
 2. storage から phase = 2 のデータを取得
 3. 設定ページのマッピング（`isouFieldMapping`）を `chrome.storage.sync` から読み取り、各フィールドに値を設定する
-4. 移送事由（`drpIsoJiyu`）・移送概要チェックボックスは固定ロジックで処理する
+4. 移送事由（`drpIsoJiyu`、「プログラム改善」固定）・移送概要チェックボックスは固定ロジックで処理する
 5. 処理完了後、`chrome.storage.local` から `isouFormData` を削除する
 
 #### 移送申請フォーム 固定処理の理由
@@ -155,7 +155,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | 項目 | 理由 |
 |------|------|
 | 申請区分（`drpIsoType`） | MAIN World ブリッジ経由の Postback 処理が必要なため、単純な値設定とは切り離して固定実装。H.運用起点（value="14"）に固定。 |
-| 移送事由（`drpIsoJiyu`） | チャット出力のテキスト（例：「プログラムミス（開発時）」）を select の value（例：`06`）に変換するマッピングが必要で、ユーザーが編集する意味がないため固定。 |
+| 移送事由（`drpIsoJiyu`） | 常に「プログラム改善」（value=`03`）固定のため、AIには出力させずコードで直接指定する（以前はAI出力テキストをselectのvalueに変換するマッピングを使っていたが、値自体を固定にしたことで不要になった）。 |
 | 移送概要（`chkIsoGaiyo*`） | チャット出力のカンマ区切りテキストから複数チェックボックスを選択するロジックが必要で、テキスト→チェックボックスID の対応表は仕様固定のため固定。 |
 
 ### Background Service Worker（仲介）
@@ -260,8 +260,8 @@ interface OpenIsouFormMessage {
   type: 'OPEN_ISOU_FORM';
   payload: {
     fields: Record<string, string>;  // formId → value（設定ページのマッピング由来）
-    isoJiyu: string;                 // 移送事由テキスト（固定ロジックで select に変換）
     isoGaiyo: string;                // 移送概要テキスト（カンマ区切り、固定ロジックでチェックボックスに変換）
+    // 移送事由はメッセージに含めない。「プログラム改善」固定のためisou.content.ts側で直接設定する
   };
 }
 

@@ -398,10 +398,10 @@ async function openIsouForm() {
     fields[formId] = extractItem(text, chatKey);
   }
 
-  const isoJiyu = extractItem(text, '移送事由');
+  // 移送事由は「プログラム改善」固定のためAIに出力させない（申請区分と同様、isou.content.ts側で固定値を設定する）
   const isoGaiyo = extractItem(text, '移送概要');
 
-  chrome.runtime.sendMessage({ type: 'OPEN_ISOU_FORM', payload: { fields, isoJiyu, isoGaiyo } });
+  chrome.runtime.sendMessage({ type: 'OPEN_ISOU_FORM', payload: { fields, isoGaiyo } });
 }
 
 // ---- SPA ナビゲーション対応 ----
