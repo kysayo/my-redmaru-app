@@ -100,6 +100,8 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
     3. 判定に失敗した場合（APIエラー等）は `console.warn` を出したうえで**未クローズ扱い＝オープン用プロンプトで続行**する。要約自体は成立するため、Playwrightバッチが1件のAPIエラーで止まらないことを優先する
   - APIキーは既存の `ViewCustomize.context.user.apiKey`（MAIN World ブリッジ経由）をそのまま使う。`/issue_statuses.json` の取得に管理者権限は不要。
   - `/issue_statuses.json` はボタンのクリック時にのみ取得する（ページ表示のたびではない）。レスポンスが小さく、後続のAI回答生成（最大90秒）に比べて無視できるコストのためキャッシュはしない。
+  - **HTTPキャッシュ事故の教訓**: `fetchIssue()`・`/issue_statuses.json` 取得の両方の `fetch()` に `cache: 'no-store'` を指定している。指定なしだと、同じチケットURLに繰り返しアクセスする環境（Playwrightバッチの永続プロファイル等）でブラウザのHTTPキャッシュから古い `status` が返り、実際はクローズ済みのチケットが未クローズと誤判定される事故が実際に発生した（同一チケットを普段使いのブラウザ＝初回アクセスで開くと正しく判定できるのに、バッチの使い回しプロファイルだけ誤判定する、という形で顕在化した）。
+  - **デバッグ手段**: `isClosedIssue()` は判定結果（どちらの経路で判定したか・ステータス名・結果）を必ず `console.log` する。Redmineチケットページの DevTools Console で確認できる。Service Worker側のコンソール（`AUTO_ANSWER_REQUEST受信` の `isClosed` ログ）も参考になるが、Playwright管理下のChromiumでは `chrome://extensions` の「Service Worker」検査リンクが表示されないことがある（その場合は右上の「デベロッパーモード」トグルがオフになっている可能性が高い）。
 - **ステートレス・リレー方式**: `background.ts` は状態を持たず、`requestId`（`crypto.randomUUID()`）と送信元タブID（`redmineTabId`）をメッセージペイロードに載せて運ぶことで、Service Workerが休止・再起動しても処理を継続できる設計にしている。回答生成待ち（最大90秒）はタブに紐づいて生存する `aichat.content.ts` 側で行う。
 - **自動送信・完了検知・回答抽出**: `aichat.content.ts` が `entrypoints/shared/aichatDom.ts` の関数を使い、テキスト挿入後にメッセージを送信し、回答完了を検知する。タイムアウト時は書き込みを行わない（誤って古い/中途半端な回答を書き込む方が害が大きいため）。
   - **送信**: `submitMessage()` がまず入力欄に対して**Ctrl+Enterのキー操作**（`keydown`/`keypress`/`keyup`）をシミュレートする（実サイトの入力欄プレースホルダーが「Ctrl + Enterキーを押して送信」と明記しており、devtools実機確認でもこちらが確実に動作した）。送信後500ms待って入力欄が空になっていれば成功とみなす。空にならない場合のみ、送信ボタン（`svg[data-testid="SendIcon"]` を持つ `button[type="submit"]`、テキストを挿入した入力欄と同じ`<form>`内を優先して検索）のクリックにフォールバックする。

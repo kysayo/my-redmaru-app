@@ -123,8 +123,12 @@ interface RedmineIssue {
 async function fetchIssue(apiKey: string): Promise<RedmineIssue> {
   const issueId = getIssueIdFromUrl();
 
+  // cache: 'no-store' を明示しないと、同じURLに繰り返しアクセスする環境（Playwrightの
+  // 永続プロファイル等）でブラウザのHTTPキャッシュから古いstatusが返り、クローズ判定を
+  // 誤る事故があったため必須にしている。
   const res = await fetch(`/issues/${issueId}.json?include=journals`, {
     headers: { 'X-Redmine-API-Key': apiKey },
+    cache: 'no-store',
   });
   if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
@@ -139,7 +143,13 @@ async function fetchIssue(apiKey: string): Promise<RedmineIssue> {
 // 判定に失敗した場合は未クローズ扱いで続行する（AI回答の生成自体は成立するため、
 // バッチ実行が1件のAPIエラーで止まらないことを優先する）。
 async function isClosedIssue(issue: RedmineIssue, apiKey: string): Promise<boolean> {
-  if (typeof issue.status?.is_closed === 'boolean') return issue.status.is_closed;
+  if (typeof issue.status?.is_closed === 'boolean') {
+    console.log('[redmaru] クローズ判定: issue.status.is_closedを使用', {
+      statusName: issue.status?.name,
+      isClosed: issue.status.is_closed,
+    });
+    return issue.status.is_closed;
+  }
 
   const statusId = issue.status?.id;
   if (statusId === undefined) {
@@ -148,15 +158,23 @@ async function isClosedIssue(issue: RedmineIssue, apiKey: string): Promise<boole
   }
 
   try {
+    // no-storeの理由はfetchIssue()のコメントを参照
     const res = await fetch('/issue_statuses.json', {
       headers: { 'X-Redmine-API-Key': apiKey },
+      cache: 'no-store',
     });
     if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
     const { issue_statuses } = await res.json();
-    return (issue_statuses ?? []).some(
+    const isClosed = (issue_statuses ?? []).some(
       (s: { id: number; is_closed?: boolean }) => s.id === statusId && s.is_closed,
     );
+    console.log('[redmaru] クローズ判定: /issue_statuses.jsonを使用', {
+      statusName: issue.status?.name,
+      statusId,
+      isClosed,
+    });
+    return isClosed;
   } catch (err) {
     console.warn('[redmaru] クローズ判定に失敗したため未クローズ扱いにします:', err);
     return false;
