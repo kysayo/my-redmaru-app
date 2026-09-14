@@ -117,6 +117,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
   - **`cf_4588`と`cf_4589`は同一PUTリクエストで同時に書き込む**（別リポジトリ `view-customize` 側の鮮度判定ロジックが `updated_on` と `cf_4588` を比較するため、別々に書くと直後に誤って「古い」と判定されてしまう。詳細は `docs/handoff-ai-answer-automation.md` 参照）。
 - **書き戻し後のRedmineページ反映**: カスタムフィールドの表示はサーバーレンダリングのため、ページを再読み込みしないと画面には反映されない。回答生成の待機中（最大90秒）にユーザーが同じタブでコメント入力等の未保存作業をしている可能性があるため、**自動リロードはしない**。書き戻し成功時はボタンラベルが「更新完了（クリックで再読込）」になり、ユーザーが任意のタイミングでクリックすると `location.reload()` される（`pendingReload` フラグで制御）。
 - **AIチャットタブの扱い**: 書き戻し成功時は自動でタブを閉じる。失敗・タイムアウト時はデバッグしやすくするためタブを残す。
+- **書き戻し成功時のRedmineタブのフォーカス**: 既定では書き戻し成功時に元のRedmineタブをアクティブ化する（`background.ts` の `focusTab()`）。設定ページの「AI回答」タブのチェックボックス（ストレージキー: `autoAnswerFocusTabOnSuccess`、デフォルト `true`）でオフにできる。Playwrightバッチ実行中に別の作業を並行して行いたいユースケースを想定している。ボタンラベルの変化（`取得中...` → `AI回答待ち...` → `更新完了`）は `AUTO_ANSWER_STATUS` の `tabs.sendMessage` で行われ、タブがバックグラウンドでも更新されるため、この設定とは独立している。タイムアウト・エラー時はこの設定に関わらずタブのフォーカスは行わない（従来通りタブを残すのみ）。
 - **ボタンのフィードバック**: alert()は使わず、ボタンラベルの変化（`取得中...` → `AI回答待ち...` → `更新完了`/`タイムアウト`/`エラー`）で結果を伝える。多重クリックはモジュールスコープの `inFlightRequestId` で防止する。
 - **Playwrightバッチとの関係**: このボタンのクリック起点フロー自体が、鮮度切れチケットを一括処理するPlaywrightバッチ（別リポジトリ [redmaru-batch](https://github.com/kysayo/redmaru-batch)、本リポジトリ外）からも再利用されている。拡張機能側にPlaywright専用のコードパスは作らない。バッチ側の完了検知は本機能の `AUTO_ANSWER_STATUS` 通知に依存せず、Redmine REST APIのポーリングで行う設計。バッチ側の仕様・設計判断の詳細は `redmaru-batch` リポジトリの `docs/spec.md` を参照。
 
@@ -222,6 +223,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `DEFAULT_ISOU_FIELD_MAPPING` | 移送申請フォームマッピング |
 | `DEFAULT_AI_ANSWER_TEMPLATE` | AI回答自動更新 定型文（オープン中のチケット） |
 | `DEFAULT_AI_ANSWER_CLOSED_TEMPLATE` | AI回答自動更新 定型文（クローズ済みのチケット） |
+| `DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS` | AI回答自動更新 書き戻し成功時のRedmineタブフォーカス可否 |
 
 ---
 
@@ -379,6 +381,7 @@ interface AutoAnswerStatusMessage {
 | `isouFieldMapping` | string | 移送申請フォームマッピング（行形式） | `shared/defaults.ts` 参照 |
 | `aiAnswerTemplate` | string | AI回答自動更新 定型文（オープン中のチケット） | `shared/defaults.ts` 参照 |
 | `aiAnswerClosedTemplate` | string | AI回答自動更新 定型文（クローズ済みのチケット） | `shared/defaults.ts` 参照 |
+| `autoAnswerFocusTabOnSuccess` | boolean | AI回答自動更新の書き戻し成功時にRedmineタブをアクティブ化するか | `true` |
 
 **chrome.storage.local**（処理中の一時データ）
 

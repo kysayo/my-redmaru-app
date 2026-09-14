@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -26,6 +26,7 @@ const isouSaved = ref(false);
 // AI回答タブの状態
 const aiAnswerTemplate = ref('');
 const aiAnswerClosedTemplate = ref('');
+const autoAnswerFocusTabOnSuccess = ref(true);
 const aiAnswerSaved = ref(false);
 
 onMounted(async () => {
@@ -37,6 +38,7 @@ onMounted(async () => {
     isouFieldMapping: DEFAULT_ISOU_FIELD_MAPPING,
     aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
     aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
+    autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
@@ -45,6 +47,7 @@ onMounted(async () => {
   isouFieldMapping.value = result.isouFieldMapping as string;
   aiAnswerTemplate.value = result.aiAnswerTemplate as string;
   aiAnswerClosedTemplate.value = result.aiAnswerClosedTemplate as string;
+  autoAnswerFocusTabOnSuccess.value = result.autoAnswerFocusTabOnSuccess as boolean;
 });
 
 async function saveRedmine() {
@@ -82,6 +85,7 @@ async function saveAiAnswer() {
   await browser.storage.sync.set({
     aiAnswerTemplate: aiAnswerTemplate.value,
     aiAnswerClosedTemplate: aiAnswerClosedTemplate.value,
+    autoAnswerFocusTabOnSuccess: autoAnswerFocusTabOnSuccess.value,
   });
   aiAnswerSaved.value = true;
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
@@ -242,6 +246,16 @@ async function saveAiAnswer() {
       v-model="aiAnswerClosedTemplate"
       rows="10"
     />
+
+    <label style="margin-top: 16px; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" v-model="autoAnswerFocusTabOnSuccess">
+      書き戻し成功時にRedmineタブを自動でアクティブにする / Focus the Redmine tab on success
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      バッチ実行中に別の作業を並行して行いたい場合は、このチェックを外すとRedmineタブが前面に出てこなくなります。<br>
+      ボタンラベルの変化（取得中... → AI回答待ち... → 更新完了）はこの設定に関わらず更新されます。<br>
+      Uncheck this if you run the batch and want to keep working in another tab/window; the button label still updates regardless of this setting.
+    </p>
 
     <button @click="saveAiAnswer">保存 / Save</button>
     <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>

@@ -5,7 +5,7 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -149,7 +149,10 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
       if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
       if (aichatTabId) await browser.tabs.remove(aichatTabId).catch(() => {});
-      await focusTab(redmineTabId);
+      const { autoAnswerFocusTabOnSuccess } = await browser.storage.sync.get({
+        autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
+      });
+      if (autoAnswerFocusTabOnSuccess) await focusTab(redmineTabId);
       await notifyRedmineTab(redmineTabId, { requestId, status: 'done' });
     } catch (err) {
       // タブは残す（デバッグ用）
