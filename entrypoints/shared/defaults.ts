@@ -18,5 +18,8 @@ export const DEFAULT_AI_ANSWER_CLOSED_TEMPLATE =
 // バッチ実行中は他の作業を並行して行うことが多いため、設定でオフにできるようにしている
 export const DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS = true;
 
+// AI回答の生成完了を待つタイムアウト秒数のデフォルト値（waitForAnswerCompleteに渡す）
+export const DEFAULT_AI_ANSWER_TIMEOUT_SECONDS = 90;
+
 export const DEFAULT_REDMINE_FOR_TR_TEMPLATE =
   'これはRedmineチケットの本文と変更履歴のテキストです。ここから移送の申請項目を以下のフォーマットで抽出してください。【】で囲んだ箇所があなたに出力してほしい項目名です。『』で囲んだ箇所が、チケットを元にあなたにまとめてほしい内容です。\n\n【案件名】\n『申請日yyyymmdd形式_移送_#チケット番号_チケットの件名』\n【対応作業】\n『「以下チケット対応のため移送承認をお願いします」という文言で改行して、対象チケットのURL』\n【移送事由詳細】\n『チケットのプロジェクト名』\n【対象プログラム】\n『「以下チケット参考」という文言で改行して、対象チケットのURL』\n【検証方法】\n『「以下チケット参考」という文言で改行して、対象チケットのURL』\n【移送番号】\n『Redmine項目名「Transfer Number」の文字』\n【本番適用日】\n『Redmine項目名「Scheduled Transfer Date」の日時のyyyy/mm/dd形式』\n【移送概要】\n『プログラム移送,データの移送,ジョブ変更,システム設定変更,その他　の中から該当するものを選択して。複数の場合はカンマ区切り。』';

@@ -5,7 +5,7 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -98,8 +98,13 @@ async function handleAutoAnswerRequest(payload: AutoAnswerRequestMessage['payloa
   const result = await browser.storage.sync.get({
     aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
     aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
+    aiAnswerTimeoutSeconds: DEFAULT_AI_ANSWER_TIMEOUT_SECONDS,
   });
   const stored = isClosed ? result.aiAnswerClosedTemplate : result.aiAnswerTemplate;
+  const timeoutSeconds =
+    typeof result.aiAnswerTimeoutSeconds === 'number' && result.aiAnswerTimeoutSeconds > 0
+      ? result.aiAnswerTimeoutSeconds
+      : DEFAULT_AI_ANSWER_TIMEOUT_SECONDS;
   const fallback = isClosed ? DEFAULT_AI_ANSWER_CLOSED_TEMPLATE : DEFAULT_AI_ANSWER_TEMPLATE;
   const template = typeof stored === 'string' ? stored : fallback;
   console.log('[redmaru] 使用する定型文:', isClosed ? 'aiAnswerClosedTemplate（クローズ済み）' : 'aiAnswerTemplate（オープン）');
@@ -117,7 +122,7 @@ async function handleAutoAnswerRequest(payload: AutoAnswerRequestMessage['payloa
     browser.tabs
       .sendMessage(tab.id!, {
         type: 'AUTO_ANSWER_START',
-        payload: { requestId, text: fullText, issueId, apiKey, redmineTabId },
+        payload: { requestId, text: fullText, issueId, apiKey, redmineTabId, timeoutMs: timeoutSeconds * 1000 },
       })
       .catch((err) => {
         console.error('[redmaru] AUTO_ANSWER_STARTの送信に失敗しました（content scriptが未注入の可能性）:', err);

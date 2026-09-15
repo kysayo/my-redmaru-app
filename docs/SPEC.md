@@ -107,7 +107,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
   - **送信**: `submitMessage()` がまず入力欄に対して**Ctrl+Enterのキー操作**（`keydown`/`keypress`/`keyup`）をシミュレートする（実サイトの入力欄プレースホルダーが「Ctrl + Enterキーを押して送信」と明記しており、devtools実機確認でもこちらが確実に動作した）。送信後500ms待って入力欄が空になっていれば成功とみなす。空にならない場合のみ、送信ボタン（`svg[data-testid="SendIcon"]` を持つ `button[type="submit"]`、テキストを挿入した入力欄と同じ`<form>`内を優先して検索）のクリックにフォールバックする。
     - devtools実機確認で判明した注意点: 送信ボタンを`click()`するだけでは、サイト側フレームワークの内部状態更新が追いつかず「クリックはされるが実際には送信されない」ケースがあったため、キーボードショートカットを優先する設計にした。
   - **完了検知**: `waitForAnswerComplete()` は監視開始時点のアンケート個数・回答コンテナ個数を**ベースライン**として記録し、そこから**増加した**ときのみ完了と判定する（存在有無ではなく差分で見る）。また監視開始から最低5秒（`minWaitMs`）は判定を確定させない。
-    - 判定の根拠は二段構え。第一に「この回答は役に立ちましたか？」フィードバックアンケートの出現数の増加（devtools実機確認済み。ただし該当spanは `class="hidden ..."` を持ち、**生成完了前からCSSで非表示のままDOMに存在している場合がある**ため、存在有無だけで判定すると送信直後に誤検知する。ベースライン差分方式はこの誤検知対策）。第二にフォールバックとして、回答コンテナ数の増加 + `MutationObserver` + デバウンス（既定1800ms）でDOM変化が止まったことを検知する方式を残す。タイムアウト上限は既定90000ms。
+    - 判定の根拠は二段構え。第一に「この回答は役に立ちましたか？」フィードバックアンケートの出現数の増加（devtools実機確認済み。ただし該当spanは `class="hidden ..."` を持ち、**生成完了前からCSSで非表示のままDOMに存在している場合がある**ため、存在有無だけで判定すると送信直後に誤検知する。ベースライン差分方式はこの誤検知対策）。第二にフォールバックとして、回答コンテナ数の増加 + `MutationObserver` + デバウンス（既定1800ms）でDOM変化が止まったことを検知する方式を残す。タイムアウト上限は設定ページの「AI回答」タブで秒数を変更できる（ストレージキー: `aiAnswerTimeoutSeconds`、デフォルト90秒）。`background.ts` の `handleAutoAnswerRequest` がstorageから読み取り、`AUTO_ANSWER_START` の `timeoutMs`（ミリ秒換算）として `aichat.content.ts` に渡す。
     - 「停止」ボタン（生成中インジケーター）は未確認だが、上記の完了検知方式で代替できているため必須ではない。
   - **回答抽出**: `getLatestAnswerText()` は回答コンテナ（`.segment-based-content`）の末尾要素から `innerText` でテキストを取り出す。**`textContent` を使ってはいけない**。回答はMarkdownをレンダリングしたHTML（`<p>`・`<li>`・`<br>` 等）で表示されており、段落の区切りは要素の構造で表現されていてテキストノード自体には改行文字が入っていない。`textContent` は要素の境界を無視して生のテキストノードを連結するため、Redmineに書き戻した回答から改行がすべて消えてしまう（画面から手動で選択・コピーした場合はブラウザが `innerText` 相当を返すため改行が残る。この差が原因の切り分けを難しくしていた）。
   - **メッセージリスナーの設計**: `aichat.content.ts` の `onMessage` リスナーはあえて非同期関数にしない（fire-and-forget）。async関数にして`AUTO_ANSWER_START`の処理（最大90秒かかりうる）を`await`すると、ブラウザは「非同期で応答する」とみなしてメッセージチャンネルを開いたままにするが、その間にMV3のService Workerが休止・再起動すると「メッセージチャンネルが応答前に閉じられた」というエラーが発生する（実害はないが不要なエラーログが出る）。応答を必要としないメッセージなので、リスナー自体は同期的に`undefined`を返し、処理は内部で投げっぱなしにする。
@@ -209,7 +209,9 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 - 「AI回答更新」ボタン用の定型文を2つ（オープン中のチケット用・クローズ済みのチケット用）テキストエリアで編集・保存できる。保存ボタンは1つで両方をまとめて保存する
 - どちらが使われるかはチケットのステータスがクローズ扱いかどうかで自動的に決まる（「AI回答自動更新」節参照）
-- ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`
+- 書き戻し成功時にRedmineタブを自動でアクティブにするかをチェックボックスで設定できる
+- AI回答の生成完了を待つタイムアウト秒数を数値入力で設定できる（デフォルト: 90秒）
+- ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`, `autoAnswerFocusTabOnSuccess`, `aiAnswerTimeoutSeconds`
 
 #### デフォルト値を変更する場合
 
@@ -224,6 +226,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `DEFAULT_AI_ANSWER_TEMPLATE` | AI回答自動更新 定型文（オープン中のチケット） |
 | `DEFAULT_AI_ANSWER_CLOSED_TEMPLATE` | AI回答自動更新 定型文（クローズ済みのチケット） |
 | `DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS` | AI回答自動更新 書き戻し成功時のRedmineタブフォーカス可否 |
+| `DEFAULT_AI_ANSWER_TIMEOUT_SECONDS` | AI回答生成の完了待ちタイムアウト秒数 |
 
 ---
 
@@ -297,6 +300,7 @@ interface AutoAnswerStartMessage {
     issueId: string;
     apiKey: string;
     redmineTabId: number; // ステートレス中継のため運ぶ
+    timeoutMs?: number;   // 回答生成の完了待ちタイムアウト（aiAnswerTimeoutSeconds由来、省略時は90000）
   };
 }
 ```
@@ -382,6 +386,7 @@ interface AutoAnswerStatusMessage {
 | `aiAnswerTemplate` | string | AI回答自動更新 定型文（オープン中のチケット） | `shared/defaults.ts` 参照 |
 | `aiAnswerClosedTemplate` | string | AI回答自動更新 定型文（クローズ済みのチケット） | `shared/defaults.ts` 参照 |
 | `autoAnswerFocusTabOnSuccess` | boolean | AI回答自動更新の書き戻し成功時にRedmineタブをアクティブ化するか | `true` |
+| `aiAnswerTimeoutSeconds` | number | AI回答生成の完了待ちタイムアウト秒数 | 90 |
 
 **chrome.storage.local**（処理中の一時データ）
 

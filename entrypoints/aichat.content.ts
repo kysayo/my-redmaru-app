@@ -35,8 +35,8 @@ function handleMessage(message: unknown): void {
 }
 
 async function handleAutoAnswerStart(payload: AutoAnswerStartMessage['payload']) {
-  const { requestId, text, issueId, apiKey, redmineTabId } = payload;
-  console.log('[redmaru] AUTO_ANSWER_START受信', { requestId, issueId, url: location.href });
+  const { requestId, text, issueId, apiKey, redmineTabId, timeoutMs } = payload;
+  console.log('[redmaru] AUTO_ANSWER_START受信', { requestId, issueId, url: location.href, timeoutMs });
 
   try {
     const inputEl = await insertTextToChat(text);
@@ -52,7 +52,9 @@ async function handleAutoAnswerStart(payload: AutoAnswerStartMessage['payload'])
     }
 
     console.log('[redmaru] 回答完了待ち開始');
-    const result = await waitForAnswerComplete({ debounceMs: 1800, timeoutMs: 90000 });
+    // timeoutMsは設定ページの「AI回答」タブの秒数設定に由来する（background.tsが解決してpayloadに載せる）。
+    // 古いbackground.js（未更新）からのメッセージに備えて未指定時は90秒にフォールバックする。
+    const result = await waitForAnswerComplete({ debounceMs: 1800, timeoutMs: timeoutMs ?? 90000 });
     console.log('[redmaru] 回答完了待ち結果:', result.status, result.status === 'success' ? result.text.slice(0, 100) : '');
 
     if (result.status === 'timeout') {
@@ -157,6 +159,8 @@ interface AutoAnswerStartMessage {
     issueId: string;
     apiKey: string;
     redmineTabId: number;
+    // 回答生成の完了待ちタイムアウト（ミリ秒）。古いbackground.jsとの互換のため省略可能
+    timeoutMs?: number;
   };
 }
 

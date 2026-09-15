@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -27,6 +27,7 @@ const isouSaved = ref(false);
 const aiAnswerTemplate = ref('');
 const aiAnswerClosedTemplate = ref('');
 const autoAnswerFocusTabOnSuccess = ref(true);
+const aiAnswerTimeoutSeconds = ref(90);
 const aiAnswerSaved = ref(false);
 
 onMounted(async () => {
@@ -39,6 +40,7 @@ onMounted(async () => {
     aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
     aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
     autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
+    aiAnswerTimeoutSeconds: DEFAULT_AI_ANSWER_TIMEOUT_SECONDS,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
@@ -48,6 +50,7 @@ onMounted(async () => {
   aiAnswerTemplate.value = result.aiAnswerTemplate as string;
   aiAnswerClosedTemplate.value = result.aiAnswerClosedTemplate as string;
   autoAnswerFocusTabOnSuccess.value = result.autoAnswerFocusTabOnSuccess as boolean;
+  aiAnswerTimeoutSeconds.value = result.aiAnswerTimeoutSeconds as number;
 });
 
 async function saveRedmine() {
@@ -86,6 +89,7 @@ async function saveAiAnswer() {
     aiAnswerTemplate: aiAnswerTemplate.value,
     aiAnswerClosedTemplate: aiAnswerClosedTemplate.value,
     autoAnswerFocusTabOnSuccess: autoAnswerFocusTabOnSuccess.value,
+    aiAnswerTimeoutSeconds: aiAnswerTimeoutSeconds.value,
   });
   aiAnswerSaved.value = true;
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
@@ -257,6 +261,23 @@ async function saveAiAnswer() {
       Uncheck this if you run the batch and want to keep working in another tab/window; the button label still updates regardless of this setting.
     </p>
 
+    <label for="ai-answer-timeout" style="margin-top: 16px;">
+      回答待ちタイムアウト（秒）/ Answer wait timeout (seconds)
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      AIの回答生成が完了するまで待つ最大秒数です(デフォルト: 90秒)。この秒数を超えるとタイムアウト扱いになり、Redmineへの書き戻しは行われません。<br>
+      Maximum seconds to wait for the AI to finish generating an answer (default: 90s). Exceeding this is treated as a timeout and nothing is written back to Redmine.
+    </p>
+    <input
+      id="ai-answer-timeout"
+      v-model.number="aiAnswerTimeoutSeconds"
+      type="number"
+      min="1"
+      max="600"
+      class="period-input"
+    />
+
+    <br>
     <button @click="saveAiAnswer">保存 / Save</button>
     <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>
   </section>
