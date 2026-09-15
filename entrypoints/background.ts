@@ -5,7 +5,7 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -99,6 +99,7 @@ async function handleAutoAnswerRequest(payload: AutoAnswerRequestMessage['payloa
     aiAnswerTemplate: DEFAULT_AI_ANSWER_TEMPLATE,
     aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
     aiAnswerTimeoutSeconds: DEFAULT_AI_ANSWER_TIMEOUT_SECONDS,
+    openAiChatTabInBackground: DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND,
   });
   const stored = isClosed ? result.aiAnswerClosedTemplate : result.aiAnswerTemplate;
   const timeoutSeconds =
@@ -110,8 +111,9 @@ async function handleAutoAnswerRequest(payload: AutoAnswerRequestMessage['payloa
   console.log('[redmaru] 使用する定型文:', isClosed ? 'aiAnswerClosedTemplate（クローズ済み）' : 'aiAnswerTemplate（オープン）');
   const fullText = template ? `${template}\n\n${content}` : content;
 
-  const tab = await browser.tabs.create({ url: AI_CHAT_URL });
-  console.log('[redmaru] AIチャットタブを作成', tab.id);
+  const openInBackground = result.openAiChatTabInBackground === true;
+  const tab = await browser.tabs.create({ url: AI_CHAT_URL, active: !openInBackground });
+  console.log('[redmaru] AIチャットタブを作成', tab.id, { openInBackground });
   if (!tab.id) return;
 
   browser.tabs.onUpdated.addListener(function listener(tabId, info) {

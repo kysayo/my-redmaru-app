@@ -120,6 +120,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
   - ただし `autoAnswerFocusTabOnSuccess` がオフの場合は閉じずに `about:blank` へ遷移させるだけにする（詳細は次項）。
 - **書き戻し成功時のRedmineタブのフォーカス**: 既定では書き戻し成功時に元のRedmineタブをアクティブ化する（`background.ts` の `focusTab()`）。設定ページの「AI回答」タブのチェックボックス（ストレージキー: `autoAnswerFocusTabOnSuccess`、デフォルト `true`）でオフにできる。Playwrightバッチ実行中に別の作業を並行して行いたいユースケースを想定している。ボタンラベルの変化（`取得中...` → `AI回答待ち...` → `更新完了`）は `AUTO_ANSWER_STATUS` の `tabs.sendMessage` で行われ、タブがバックグラウンドでも更新されるため、この設定とは独立している。タイムアウト・エラー時はこの設定に関わらずタブのフォーカスは行わない（従来通りタブを残すのみ）。
   - **AIチャットタブを閉じる操作自体もフォーカス奪取の経路になる**: `focusTab()` を呼ばないようにしても、書き戻し成功時に `chrome.tabs.remove()` でAIチャットタブを閉じると、そのウィンドウ内のアクティブタブ切り替えに伴ってウィンドウがOSレベルで前面化してしまう事象が実機で確認された（Windows）。そのため `autoAnswerFocusTabOnSuccess` がオフのときは、タブを閉じる代わりに `browser.tabs.update(aichatTabId, { url: 'about:blank' })` で遷移させるだけにとどめ、クローズに伴うタブ切り替えを起こさないようにしている（この場合AIチャットタブは閉じずに残り続けるため、蓄積する点は許容している）。
+  - **さらにタブ作成時点でもフォーカスが奪われる**: 上記の対策後も、Playwrightバッチで他アプリ（Teams等）を操作している最中にAIチャットの回答受信タイミングでブラウザが前面化する事象が報告された。原因は、AIチャットタブがそもそも `browser.tabs.create({ url: AI_CHAT_URL })`（`active` 未指定＝既定で `true`）としてアクティブな状態で作られており、その**アクティブなタブ**に対して閉じる・URLを変えるといった操作をすること自体がウィンドウの前面化を招いていたためと考えられる。対策として設定ページの「AI回答」タブに独立したチェックボックス（ストレージキー: `openAiChatTabInBackground`、デフォルト `false`）を追加し、オンの場合は `browser.tabs.create({ url: AI_CHAT_URL, active: false })` としてAIチャットタブを最初から非アクティブ（バックグラウンド）で開く。既存の動作に影響させないため既定はオフとし、`autoAnswerFocusTabOnSuccess` とは独立した設定にしている。認証（RedmineのAPIキー取得は関係ないが、AIチャット側のSSOセッション切れ）が発生した場合にバックグラウンドタブがログイン画面のまま気づかれない可能性があるが、Playwrightバッチは単独ユーザー利用を前提としており、認証切れによる個別チケットの失敗は許容している（自動検知・自動アクティブ化のフォールバックは設けない）。
 - **ボタンのフィードバック**: alert()は使わず、ボタンラベルの変化（`取得中...` → `AI回答待ち...` → `更新完了`/`タイムアウト`/`エラー`）で結果を伝える。多重クリックはモジュールスコープの `inFlightRequestId` で防止する。
 - **Playwrightバッチとの関係**: このボタンのクリック起点フロー自体が、鮮度切れチケットを一括処理するPlaywrightバッチ（別リポジトリ [redmaru-batch](https://github.com/kysayo/redmaru-batch)、本リポジトリ外）からも再利用されている。拡張機能側にPlaywright専用のコードパスは作らない。バッチ側の完了検知は本機能の `AUTO_ANSWER_STATUS` 通知に依存せず、Redmine REST APIのポーリングで行う設計。バッチ側の仕様・設計判断の詳細は `redmaru-batch` リポジトリの `docs/spec.md` を参照。
 
@@ -213,7 +214,8 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 - どちらが使われるかはチケットのステータスがクローズ扱いかどうかで自動的に決まる（「AI回答自動更新」節参照）
 - 書き戻し成功時にRedmineタブを自動でアクティブにするかをチェックボックスで設定できる
 - AI回答の生成完了を待つタイムアウト秒数を数値入力で設定できる（デフォルト: 90秒）
-- ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`, `autoAnswerFocusTabOnSuccess`, `aiAnswerTimeoutSeconds`
+- AIチャットタブをバックグラウンド（非アクティブ）で開くかをチェックボックスで設定できる（デフォルト: オフ）
+- ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`, `autoAnswerFocusTabOnSuccess`, `aiAnswerTimeoutSeconds`, `openAiChatTabInBackground`
 
 #### デフォルト値を変更する場合
 
@@ -229,6 +231,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `DEFAULT_AI_ANSWER_CLOSED_TEMPLATE` | AI回答自動更新 定型文（クローズ済みのチケット） |
 | `DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS` | AI回答自動更新 書き戻し成功時のRedmineタブフォーカス可否 |
 | `DEFAULT_AI_ANSWER_TIMEOUT_SECONDS` | AI回答生成の完了待ちタイムアウト秒数 |
+| `DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND` | AIチャットタブを非アクティブで開くかの既定値 |
 
 ---
 
@@ -389,6 +392,7 @@ interface AutoAnswerStatusMessage {
 | `aiAnswerClosedTemplate` | string | AI回答自動更新 定型文（クローズ済みのチケット） | `shared/defaults.ts` 参照 |
 | `autoAnswerFocusTabOnSuccess` | boolean | AI回答自動更新の書き戻し成功時にRedmineタブをアクティブ化するか | `true` |
 | `aiAnswerTimeoutSeconds` | number | AI回答生成の完了待ちタイムアウト秒数 | 90 |
+| `openAiChatTabInBackground` | boolean | AIチャットタブを非アクティブ（バックグラウンド）で開くか | `false` |
 
 **chrome.storage.local**（処理中の一時データ）
 

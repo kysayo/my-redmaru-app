@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -28,6 +28,7 @@ const aiAnswerTemplate = ref('');
 const aiAnswerClosedTemplate = ref('');
 const autoAnswerFocusTabOnSuccess = ref(true);
 const aiAnswerTimeoutSeconds = ref(90);
+const openAiChatTabInBackground = ref(false);
 const aiAnswerSaved = ref(false);
 
 onMounted(async () => {
@@ -41,6 +42,7 @@ onMounted(async () => {
     aiAnswerClosedTemplate: DEFAULT_AI_ANSWER_CLOSED_TEMPLATE,
     autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
     aiAnswerTimeoutSeconds: DEFAULT_AI_ANSWER_TIMEOUT_SECONDS,
+    openAiChatTabInBackground: DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND,
   });
   redmineTemplate.value = result.template as string;
   teamsTemplate.value = result.teamsTemplate as string;
@@ -50,6 +52,7 @@ onMounted(async () => {
   aiAnswerTemplate.value = result.aiAnswerTemplate as string;
   aiAnswerClosedTemplate.value = result.aiAnswerClosedTemplate as string;
   autoAnswerFocusTabOnSuccess.value = result.autoAnswerFocusTabOnSuccess as boolean;
+  openAiChatTabInBackground.value = result.openAiChatTabInBackground as boolean;
   aiAnswerTimeoutSeconds.value = result.aiAnswerTimeoutSeconds as number;
 });
 
@@ -90,6 +93,7 @@ async function saveAiAnswer() {
     aiAnswerClosedTemplate: aiAnswerClosedTemplate.value,
     autoAnswerFocusTabOnSuccess: autoAnswerFocusTabOnSuccess.value,
     aiAnswerTimeoutSeconds: aiAnswerTimeoutSeconds.value,
+    openAiChatTabInBackground: openAiChatTabInBackground.value,
   });
   aiAnswerSaved.value = true;
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
@@ -278,7 +282,15 @@ async function saveAiAnswer() {
       class="period-input"
     />
 
-    <br>
+    <label style="margin-top: 16px; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" v-model="openAiChatTabInBackground">
+      AIチャットタブをバックグラウンドで開く / Open the AI chat tab in the background
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      バッチ実行中に他のアプリを操作していても、AIチャットタブを開閉する処理でブラウザが前面に出てこないようにしたい場合にオンにしてください（既定はオフ、既存の動作のまま）。<br>
+      Enable this if you don't want the browser window to steal focus when the AI chat tab is opened/closed while running the batch and working in another app (default: off, unchanged behavior).
+    </p>
+
     <button @click="saveAiAnswer">保存 / Save</button>
     <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>
   </section>
