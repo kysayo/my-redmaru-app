@@ -258,7 +258,8 @@ async function saveAiAnswer() {
     <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
       バッチ実行中に別の作業を並行して行いたい場合は、このチェックを外すとRedmineタブが前面に出てこなくなります。<br>
       ボタンラベルの変化（取得中... → AI回答待ち... → 更新完了）はこの設定に関わらず更新されます。<br>
-      Uncheck this if you run the batch and want to keep working in another tab/window; the button label still updates regardless of this setting.
+      チェックを外すとAIチャットタブを閉じる代わりに空白ページへ遷移させて残すようになります（タブを閉じる操作自体もウィンドウの前面化を招くことがあるため）。<br>
+      Uncheck this if you run the batch and want to keep working in another tab/window; the button label still updates regardless of this setting. When unchecked, the AI chat tab is navigated to a blank page instead of being closed, since closing it can itself bring the window to the front.
     </p>
 
     <label for="ai-answer-timeout" style="margin-top: 16px;">

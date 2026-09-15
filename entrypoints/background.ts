@@ -153,10 +153,19 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
       });
       if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
 
-      if (aichatTabId) await browser.tabs.remove(aichatTabId).catch(() => {});
       const { autoAnswerFocusTabOnSuccess } = await browser.storage.sync.get({
         autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
       });
+      if (aichatTabId) {
+        if (autoAnswerFocusTabOnSuccess) {
+          // タブを閉じる（chrome.tabs.remove）操作自体が、アクティブタブの切り替えに伴って
+          // ウィンドウをOSレベルで前面化させることがある。フォーカスさせたくない設定では
+          // 閉じずにabout:blankへ遷移させるだけにとどめ、フォーカス奪取の経路を断つ。
+          await browser.tabs.remove(aichatTabId).catch(() => {});
+        } else {
+          await browser.tabs.update(aichatTabId, { url: 'about:blank' }).catch(() => {});
+        }
+      }
       if (autoAnswerFocusTabOnSuccess) await focusTab(redmineTabId);
       await notifyRedmineTab(redmineTabId, { requestId, status: 'done' });
     } catch (err) {
