@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_EXCLUDED_CUSTOM_FIELDS } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -8,6 +8,7 @@ const activeTab = ref<TabKey>('redmine');
 
 // Redmineタブの状態
 const redmineTemplate = ref('');
+const excludedCustomFields = ref('');
 const redmineSaved = ref(false);
 
 // Teamsタブの状態
@@ -34,6 +35,7 @@ const aiAnswerSaved = ref(false);
 onMounted(async () => {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
+    excludedCustomFields: DEFAULT_EXCLUDED_CUSTOM_FIELDS,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
     teamsPeriodDays: 14,
     redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
@@ -45,6 +47,7 @@ onMounted(async () => {
     openAiChatTabInBackground: DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND,
   });
   redmineTemplate.value = result.template as string;
+  excludedCustomFields.value = result.excludedCustomFields as string;
   teamsTemplate.value = result.teamsTemplate as string;
   teamsPeriodDays.value = result.teamsPeriodDays as number;
   redmineForTrTemplate.value = result.redmineForTrTemplate as string;
@@ -57,9 +60,16 @@ onMounted(async () => {
 });
 
 async function saveRedmine() {
-  await browser.storage.sync.set({ template: redmineTemplate.value });
+  await browser.storage.sync.set({
+    template: redmineTemplate.value,
+    excludedCustomFields: excludedCustomFields.value,
+  });
   redmineSaved.value = true;
   setTimeout(() => { redmineSaved.value = false; }, 2000);
+}
+
+function resetExcludedCustomFields() {
+  excludedCustomFields.value = DEFAULT_EXCLUDED_CUSTOM_FIELDS;
 }
 
 async function saveTeams() {
@@ -152,7 +162,26 @@ async function saveAiAnswer() {
       v-model="redmineTemplate"
       rows="6"
     />
-    <button @click="saveRedmine">保存 / Save</button>
+
+    <label for="excluded-custom-fields" style="margin-top: 16px;">
+      除外するカスタムフィールド / Excluded custom fields
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      「to MaruCha」「for TR」「AI回答更新」いずれのボタンでも、AIチャットに送信するチケット情報からここに書いたカスタムフィールドを除外します。<br>
+      1行に1つ、<code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">cf_4589</code> のような形式で記入してください。<br>
+      AIまとめ欄（cf_4589等）を除外対象に含めておくと、AI自身が過去に書いた回答を再度読み込ませて要約させてしまう事故を防げます。<br>
+      Custom fields listed here (one per line, e.g. <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">cf_4589</code>) are excluded from the ticket content sent to the AI chat, for all three buttons.
+    </p>
+    <textarea
+      id="excluded-custom-fields"
+      v-model="excludedCustomFields"
+      rows="4"
+      style="font-family: monospace;"
+    />
+    <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+      <button @click="saveRedmine">保存 / Save</button>
+      <button @click="resetExcludedCustomFields" style="background: #757575;">デフォルトに戻す</button>
+    </div>
     <p v-if="redmineSaved" class="saved-msg">保存しました / Saved</p>
   </section>
 

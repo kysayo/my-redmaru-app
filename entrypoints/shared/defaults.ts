@@ -25,5 +25,10 @@ export const DEFAULT_AI_ANSWER_TIMEOUT_SECONDS = 90;
 // 既存の挙動（アクティブで開く）に影響させないため既定はオフ
 export const DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND = false;
 
+// 送信対象から除外するカスタムフィールド（cf_XXXX形式、改行区切り）のデフォルト値。
+// cf_4589・cf_4720はいずれもRedmine側でAIまとめ用途に使われているカスタムフィールドであり、
+// これらを含めて再度AIに要約させるとAI自身の過去の回答が入力に混ざってしまうため既定で除外する。
+export const DEFAULT_EXCLUDED_CUSTOM_FIELDS = 'cf_4589\ncf_4720';
+
 export const DEFAULT_REDMINE_FOR_TR_TEMPLATE =
   'これはRedmineチケットの本文と変更履歴のテキストです。ここから移送の申請項目を以下のフォーマットで抽出してください。【】で囲んだ箇所があなたに出力してほしい項目名です。『』で囲んだ箇所が、チケットを元にあなたにまとめてほしい内容です。\n\n【案件名】\n『申請日yyyymmdd形式_移送_#チケット番号_チケットの件名』\n【対応作業】\n『「以下チケット対応のため移送承認をお願いします」という文言で改行して、対象チケットのURL』\n【移送事由詳細】\n『チケットのプロジェクト名』\n【対象プログラム】\n『「以下チケット参考」という文言で改行して、対象チケットのURL』\n【検証方法】\n『「以下チケット参考」という文言で改行して、対象チケットのURL』\n【移送番号】\n『Redmine項目名「Transfer Number」の文字』\n【本番適用日】\n『Redmine項目名「Scheduled Transfer Date」の日時のyyyy/mm/dd形式』\n【移送概要】\n『プログラム移送,データの移送,ジョブ変更,システム設定変更,その他　の中から該当するものを選択して。複数の場合はカンマ区切り。』';

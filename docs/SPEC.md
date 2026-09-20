@@ -30,9 +30,18 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
     - プロジェクト名はチケットの属性欄ではなくページ上部のパンくずに表示されるが、API レスポンスの `project.name` から取得できるため DOM は参照しない
     - **チケットURL（`{origin}/issues/{id}`）は「for TR」ボタンのときだけ含める**。移送申請の定型文が複数の項目でチケットURLの出力を求めており、AIは社内RedmineのURLを知らないため渡さないと架空のURLを作ってしまう。一方でAI回答（`cf_4589`）の要約にURLが紛れ込むのは避けたいため、`formatTicketInfo()` の `includeUrl` オプションで送信元ごとに切り替える
   - 説明文
-  - カスタムフィールド（値が空のものは除外）
+  - カスタムフィールド（値が空のものは除外。加えて設定ページで指定した除外対象カスタムフィールドも除外する。詳細は「除外するカスタムフィールド」参照）
   - コメント（journals のうち notes が空でないもの）
 - Redmine API の認証キーは `ViewCustomize.context.user.apiKey` から取得する（MAIN World ブリッジ経由）
+
+#### 除外するカスタムフィールド
+
+「AI回答更新」で `cf_4589`（AIまとめ）にAIの回答を書き戻す運用を始めたことで、次回以降「to MaruCha」「for TR」「AI回答更新」のいずれかを実行すると、そのAIまとめ欄の値もカスタムフィールドの一覧に含まれてAIチャットに送信されてしまう（AI自身の過去の回答を入力として再度要約させることになる）。これを避けるため、送信対象から除外するカスタムフィールドを設定ページで指定できるようにしている。
+
+- 設定ページの「Redmine」タブに複数行のテキストエリアがあり、1行に1つ `cf_4589` のような形式でカスタムフィールドを記入する（改行・カンマ・空白のいずれの区切りにも対応。`entrypoints/shared/customFieldFilter.ts` の `parseExcludedCustomFieldIds()` が数値IDを抽出する）
+- ここで指定したカスタムフィールドは3つのボタンすべて（`formatTicketInfo()` の `excludedCustomFieldIds` オプション）で除外される
+- ストレージキー: `excludedCustomFields`（string、改行区切り）
+- デフォルトは `cf_4589`・`cf_4720` を除外（`DEFAULT_EXCLUDED_CUSTOM_FIELDS`）。いずれもRedmine側でAIまとめ用途に使われているカスタムフィールドのため
 
 ### Teams 側（送信）
 
@@ -185,7 +194,8 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 #### Redmine タブ
 
 - 定型文をテキストエリアで編集・保存できる
-- ストレージキー: `template`
+- 除外するカスタムフィールドをテキストエリア（1行1項目、`cf_XXXX`形式）で編集・保存できる（詳細は「除外するカスタムフィールド」参照）。「デフォルトに戻す」ボタンでデフォルト値をテキストエリアに復元できる（保存は手動）
+- ストレージキー: `template`, `excludedCustomFields`
 
 #### Teams タブ
 
@@ -224,6 +234,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | 定数 | 用途 |
 |------|------|
 | `DEFAULT_REDMINE_TEMPLATE` | Redmine 定型文 |
+| `DEFAULT_EXCLUDED_CUSTOM_FIELDS` | 送信対象から除外するカスタムフィールド |
 | `DEFAULT_TEAMS_TEMPLATE` | Teams 定型文 |
 | `DEFAULT_REDMINE_FOR_TR_TEMPLATE` | Redmine for TR 定型文 |
 | `DEFAULT_ISOU_FIELD_MAPPING` | 移送申請フォームマッピング |
@@ -254,6 +265,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `entrypoints/shared/isouMapping.ts` | 共有モジュール | フォームマッピング設定文字列のパース関数（`parseIsouMapping`） |
 | `entrypoints/shared/aichatDom.ts` | 共有モジュール | AIチャットの送信ボタンクリック・生成完了検知（`waitForAnswerComplete`）・回答抽出（`getLatestAnswerText`）のDOM操作ヘルパー |
 | `entrypoints/shared/dateFormat.ts` | 共有モジュール | `cf_4588` 用の `YYYY-MM-DD HH:mm:ss` 形式日時文字列を生成する `formatDateTimeJst` |
+| `entrypoints/shared/customFieldFilter.ts` | 共有モジュール | 設定ページの「除外するカスタムフィールド」テキストから対象IDを抽出する `parseExcludedCustomFieldIds` |
 
 ### メッセージプロトコル
 
@@ -384,6 +396,7 @@ interface AutoAnswerStatusMessage {
 | キー | 型 | 説明 | デフォルト |
 |------|-----|------|-----------|
 | `template` | string | Redmine 定型文 | `shared/defaults.ts` 参照 |
+| `excludedCustomFields` | string | 送信対象から除外するカスタムフィールド（`cf_XXXX`形式、改行区切り） | `cf_4589`, `cf_4720` |
 | `teamsTemplate` | string | Teams 定型文 | `shared/defaults.ts` 参照 |
 | `teamsPeriodDays` | number | Teams 収集期間（日数） | 14 |
 | `redmineForTrTemplate` | string | Redmine for TR 定型文 | `shared/defaults.ts` 参照 |

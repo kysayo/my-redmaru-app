@@ -3,6 +3,9 @@
  * チケットページにボタンを注入し、チケット情報をAIチャットに送信する
  */
 
+import { DEFAULT_EXCLUDED_CUSTOM_FIELDS } from './shared/defaults';
+import { parseExcludedCustomFieldIds } from './shared/customFieldFilter';
+
 export default defineContentScript({
   matches: ['https://misol-dev.cloud.redmine.jp/issues/*'],
   main() {
@@ -181,7 +184,20 @@ async function isClosedIssue(issue: RedmineIssue, apiKey: string): Promise<boole
   }
 }
 
-function formatTicketInfo(issue: RedmineIssue, options: { includeUrl?: boolean } = {}): string {
+// AI回答の書き戻し先であるcf_4589等はAI自身の過去の回答であり、これを含めて再度AIに
+// 要約させると出力が過去回答に引きずられてしまうため、設定ページで指定された
+// カスタムフィールドを送信対象から除外する。
+async function getExcludedCustomFieldIds(): Promise<Set<number>> {
+  const { excludedCustomFields } = await browser.storage.sync.get({
+    excludedCustomFields: DEFAULT_EXCLUDED_CUSTOM_FIELDS,
+  });
+  return parseExcludedCustomFieldIds(excludedCustomFields as string);
+}
+
+function formatTicketInfo(
+  issue: RedmineIssue,
+  options: { includeUrl?: boolean; excludedCustomFieldIds?: Set<number> } = {},
+): string {
   const lines: string[] = [`チケット #${issue.id}: ${issue.subject}`];
 
   // 「for TR」の定型文は移送申請の各項目でチケットURLを出力させるため、URLを明示的に渡す。
@@ -203,7 +219,11 @@ function formatTicketInfo(issue: RedmineIssue, options: { includeUrl?: boolean }
   }
 
   const nonEmptyCf = (issue.custom_fields ?? []).filter(
-    (cf: { value: unknown }) => cf.value !== '' && cf.value !== null && cf.value !== undefined
+    (cf) =>
+      cf.value !== '' &&
+      cf.value !== null &&
+      cf.value !== undefined &&
+      !options.excludedCustomFieldIds?.has(cf.id)
   );
   if (nonEmptyCf.length > 0) {
     lines.push('', 'カスタムフィールド:');
@@ -226,8 +246,10 @@ function formatTicketInfo(issue: RedmineIssue, options: { includeUrl?: boolean }
 async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
     const apiKey = await requestApiKey();
+    const excludedCustomFieldIds = await getExcludedCustomFieldIds();
     const ticketInfo = formatTicketInfo(await fetchIssue(apiKey), {
       includeUrl: source === 'redmine-tr',
+      excludedCustomFieldIds,
     });
 
     await browser.runtime.sendMessage({
@@ -275,7 +297,8 @@ async function handleAiAnswerButtonClick() {
     const issueId = getIssueIdFromUrl();
     const apiKey = await requestApiKey();
     const issue = await fetchIssue(apiKey);
-    const content = formatTicketInfo(issue);
+    const excludedCustomFieldIds = await getExcludedCustomFieldIds();
+    const content = formatTicketInfo(issue, { excludedCustomFieldIds });
     // クローズ済みチケットは別の定型文（完了報告向け）でまとめさせる
     const isClosed = await isClosedIssue(issue, apiKey);
 
