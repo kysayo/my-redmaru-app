@@ -139,6 +139,33 @@ async function fetchIssue(apiKey: string): Promise<RedmineIssue> {
   return issue;
 }
 
+interface ChildIssue {
+  id: number;
+  subject: string;
+}
+
+// 表示中のチケットの子チケット（番号・題名のみ）を取得する。
+// 子チケットの説明やカスタムフィールドまで含めるとAIに渡す情報量が増えすぎて
+// 要約の精度がかえって落ちるため、番号と題名だけに絞る。
+// status_id=* を付けないと /issues.json はデフォルトで未完了のもの（open）しか
+// 返さないため、クローズ済みの子チケットも一覧に含まれるよう明示的に指定する。
+async function fetchChildIssues(issueId: string, apiKey: string): Promise<ChildIssue[]> {
+  try {
+    // no-storeの理由はfetchIssue()のコメントを参照
+    const res = await fetch(`/issues.json?parent_id=${issueId}&status_id=*&limit=100`, {
+      headers: { 'X-Redmine-API-Key': apiKey },
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(`Redmine API エラー: ${res.status}`);
+
+    const { issues } = await res.json();
+    return (issues ?? []).map((i: { id: number; subject: string }) => ({ id: i.id, subject: i.subject }));
+  } catch (err) {
+    console.warn('[redmaru] 子チケットの取得に失敗しました:', err);
+    return [];
+  }
+}
+
 // チケットがクローズ扱いのステータスかどうかを判定する。
 // issue.status.is_closed はRedmineのバージョンによっては返らないため、
 // 返らない場合は /issue_statuses.json からクローズ扱いのステータスIDを引く
@@ -196,7 +223,7 @@ async function getExcludedCustomFieldIds(): Promise<Set<number>> {
 
 function formatTicketInfo(
   issue: RedmineIssue,
-  options: { includeUrl?: boolean; excludedCustomFieldIds?: Set<number> } = {},
+  options: { includeUrl?: boolean; excludedCustomFieldIds?: Set<number>; childIssues?: ChildIssue[] } = {},
 ): string {
   const lines: string[] = [`チケット #${issue.id}: ${issue.subject}`];
 
@@ -232,6 +259,13 @@ function formatTicketInfo(
     }
   }
 
+  if (options.childIssues && options.childIssues.length > 0) {
+    lines.push('', '子チケット:');
+    for (const child of options.childIssues) {
+      lines.push(`  #${child.id}: ${child.subject}`);
+    }
+  }
+
   const notes = (issue.journals ?? []).filter((j: { notes: string }) => j.notes?.trim());
   if (notes.length > 0) {
     lines.push('', 'コメント:');
@@ -245,11 +279,15 @@ function formatTicketInfo(
 
 async function handleButtonClick(source: 'redmine' | 'redmine-tr') {
   try {
+    const issueId = getIssueIdFromUrl();
     const apiKey = await requestApiKey();
     const excludedCustomFieldIds = await getExcludedCustomFieldIds();
+    // 子チケット情報は「to MaruCha」でのみ付加する（「for TR」は移送申請の項目抽出用のため対象外）
+    const childIssues = source === 'redmine' ? await fetchChildIssues(issueId, apiKey) : [];
     const ticketInfo = formatTicketInfo(await fetchIssue(apiKey), {
       includeUrl: source === 'redmine-tr',
       excludedCustomFieldIds,
+      childIssues,
     });
 
     await browser.runtime.sendMessage({
@@ -298,7 +336,8 @@ async function handleAiAnswerButtonClick() {
     const apiKey = await requestApiKey();
     const issue = await fetchIssue(apiKey);
     const excludedCustomFieldIds = await getExcludedCustomFieldIds();
-    const content = formatTicketInfo(issue, { excludedCustomFieldIds });
+    const childIssues = await fetchChildIssues(issueId, apiKey);
+    const content = formatTicketInfo(issue, { excludedCustomFieldIds, childIssues });
     // クローズ済みチケットは別の定型文（完了報告向け）でまとめさせる
     const isClosed = await isClosedIssue(issue, apiKey);
 
