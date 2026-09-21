@@ -1,6 +1,14 @@
 export const DEFAULT_REDMINE_TEMPLATE =
   'これはRedmineチケットの本文と変更履歴のテキストです。後半は更新時のコメントです。400文字程度に要約してください。誰が何をしたかの主語がわかるようにしてください。わからない時は詳細不明でもよいです。結論としてどうなったか、どういう状態にあるかを優先して記載してください。子チケットがある場合は存在することを簡単に記載してください。';
 
+// 「to MaruCha」の英語話者向け定型文。日本語版の「400文字程度」は日本語の情報量を
+// 英語に置き換えると概ね200語相当になるため、文字数ではなく語数で指定している。
+export const DEFAULT_REDMINE_TEMPLATE_EN =
+  "This is the text from the body and change history of a Redmine ticket. The latter part consists of comments made during updates. Please summarize this in approximately 200 words. Make sure it's clear who did what. If you're unsure, it's okay to note that the details are unknown. Prioritize describing the final outcome and the current status. If there are sub-tickets, briefly mention their existence. Please answer in English.";
+
+// 「to MaruCha」でどちらの定型文を使うかのデフォルト値
+export const DEFAULT_REDMINE_TEMPLATE_LANGUAGE: 'ja' | 'en' = 'ja';
+
 export const DEFAULT_TEAMS_TEMPLATE =
   'これはTeamsチャットの{日数}日間の履歴です。トピックごとに段落を作り経緯と今の状態を整理して全体が600文字程度に要約してください。誰が何をしたかわかるようにしてください。わからない時は詳細不明でもよいです。段落で改行してください。';
 

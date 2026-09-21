@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_EXCLUDED_CUSTOM_FIELDS } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_EXCLUDED_CUSTOM_FIELDS } from '../shared/defaults';
 
 type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
 
@@ -8,6 +8,8 @@ const activeTab = ref<TabKey>('redmine');
 
 // Redmineタブの状態
 const redmineTemplate = ref('');
+const redmineTemplateEn = ref('');
+const templateLanguage = ref<'ja' | 'en'>('ja');
 const excludedCustomFields = ref('');
 const redmineSaved = ref(false);
 
@@ -35,6 +37,8 @@ const aiAnswerSaved = ref(false);
 onMounted(async () => {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
+    templateEn: DEFAULT_REDMINE_TEMPLATE_EN,
+    templateLanguage: DEFAULT_REDMINE_TEMPLATE_LANGUAGE,
     excludedCustomFields: DEFAULT_EXCLUDED_CUSTOM_FIELDS,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
     teamsPeriodDays: 14,
@@ -47,6 +51,8 @@ onMounted(async () => {
     openAiChatTabInBackground: DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND,
   });
   redmineTemplate.value = result.template as string;
+  redmineTemplateEn.value = result.templateEn as string;
+  templateLanguage.value = result.templateLanguage as 'ja' | 'en';
   excludedCustomFields.value = result.excludedCustomFields as string;
   teamsTemplate.value = result.teamsTemplate as string;
   teamsPeriodDays.value = result.teamsPeriodDays as number;
@@ -62,6 +68,8 @@ onMounted(async () => {
 async function saveRedmine() {
   await browser.storage.sync.set({
     template: redmineTemplate.value,
+    templateEn: redmineTemplateEn.value,
+    templateLanguage: templateLanguage.value,
     excludedCustomFields: excludedCustomFields.value,
   });
   redmineSaved.value = true;
@@ -152,7 +160,23 @@ async function saveAiAnswer() {
   </nav>
 
   <section v-if="activeTab === 'redmine'">
-    <label for="redmine-template">定型文 / Template</label>
+    <label>使用する定型文 / Template to use</label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      「to MaruCha」ボタンで実際に使う定型文を選びます。英語話者向けにAIへ英語で回答させたい場合はEnglishを選んでください。<br>
+      Choose which template "to MaruCha" actually uses. Select English if you want the AI to reply in English for English-speaking users.
+    </p>
+    <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+        <input type="radio" value="ja" v-model="templateLanguage">
+        日本語 / Japanese
+      </label>
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+        <input type="radio" value="en" v-model="templateLanguage">
+        English
+      </label>
+    </div>
+
+    <label for="redmine-template">定型文（日本語）/ Template (Japanese)</label>
     <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
       AIチャットに送信する際にチケット情報の前に追加される文章です。<br>
       Text added before the ticket content when sending to AI chat.
@@ -160,6 +184,17 @@ async function saveAiAnswer() {
     <textarea
       id="redmine-template"
       v-model="redmineTemplate"
+      rows="6"
+    />
+
+    <label for="redmine-template-en" style="margin-top: 16px;">定型文（English）/ Template (English)</label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      上の言語選択でEnglishを選んだときに使われる定型文です。<br>
+      Used when English is selected above.
+    </p>
+    <textarea
+      id="redmine-template-en"
+      v-model="redmineTemplateEn"
       rows="6"
     />
 

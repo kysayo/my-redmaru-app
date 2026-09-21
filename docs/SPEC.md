@@ -22,7 +22,7 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
 - チケットページに「to MaruCha」「for TR」「AI回答更新」の3ボタンを注入する（横並び）
   - 「AI回答更新」は `cf_4589`（AIまとめ）欄の直下に挿入する。このカスタムフィールドはトラッカーごとにRedmine側で表示/非表示が制御されているため、欄がない（`.cf_4589.attribute` が存在しない）トラッカーではボタン自体を表示しない
 - 「to MaruCha」「for TR」ボタンクリック時、チケット情報の先頭にプロンプト（定型文）を付加して MaruCha に送信する（送信・回答待ち・書き戻しは行わない。人間が手動で送信・確認する）
-  - 「to MaruCha」のプロンプトは設定ページの「Redmine」タブで変更可能（ストレージキー: `template`）
+  - 「to MaruCha」のプロンプトは設定ページの「Redmine」タブで変更可能。日本語話者向け・英語話者向けの2種類を保存でき、どちらを使うかも同タブで切り替えられる（詳細は「to MaruChaの定型文の言語切り替え」参照。ストレージキー: `template`, `templateEn`, `templateLanguage`）
   - 「for TR」のプロンプトは設定ページの「Redmine for TR」タブで変更可能（ストレージキー: `redmineForTrTemplate`）
 - 「AI回答更新」ボタンクリック時は、送信・回答待ち・Redmineへの書き戻しまで自動で完結する（詳細は「AI回答自動更新（送信・待機・書き戻し）」参照）
 - ボタンクリックで以下の情報を Redmine API（`/issues/{id}.json?include=journals`）で取得する
@@ -44,6 +44,15 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
   - 取得に失敗した場合は `console.warn` を出したうえで子チケットなし扱いとして続行する（クローズ判定と同様、この情報が無くても要約自体は成立するため、1件のAPIエラーで処理全体を止めないことを優先する）
 - `formatTicketInfo()` の `childIssues` オプションで受け取り、`子チケット:` セクションとして `#{id}: {subject}` の形式で1行ずつ出力する（カスタムフィールドの後、コメントの前に挿入）
 - デフォルトの定型文（「to MaruCha」「AI回答」オープン・クローズの3種）には「子チケットがある場合は存在することを簡単に記載してください」という指示を追加している
+
+#### to MaruChaの定型文の言語切り替え
+
+「to MaruCha」の利用者には英語話者もおり、AIに英語で回答させたいケースがある。そのため「to MaruCha」の定型文だけは日本語用・英語用の2種類を保存でき、設定ページで使う方を切り替えられるようにしている（AIまとめ機能・「for TR」は対象外。別の対応を検討中のため）。
+
+- 設定ページの「Redmine」タブにラジオボタン（日本語 / English）があり、選んだ方の定型文が実際に使われる
+- 日本語用は `template`（既存のストレージキーをそのまま流用）、英語用は新規の `templateEn`。どちらを使うかは `templateLanguage`（`'ja'` | `'en'`、デフォルト `'ja'`）で管理する
+- テンプレートの選択・結合は `background.ts` の `OPEN_AI_CHAT` ハンドラで行う（`redmine.content.ts` 側は `source: 'redmine'` を送るだけで変更なし）
+- 英語用のデフォルト定型文（`DEFAULT_REDMINE_TEMPLATE_EN`）は日本語版の「400文字程度」を語数ベースに置き換え、「approximately 200 words」としている（日本語400字とおおよそ同等の情報量として、日本語1文字を英語0.5〜0.6語相当とする目安で概算した値）
 
 #### 除外するカスタムフィールド
 
@@ -204,9 +213,9 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 #### Redmine タブ
 
-- 定型文をテキストエリアで編集・保存できる
+- 定型文を日本語用・英語用の2種類、それぞれテキストエリアで編集・保存できる。ラジオボタンでどちらを実際に使うかを切り替えられる（詳細は「to MaruChaの定型文の言語切り替え」参照）
 - 除外するカスタムフィールドをテキストエリア（1行1項目、`cf_XXXX`形式）で編集・保存できる（詳細は「除外するカスタムフィールド」参照）。「デフォルトに戻す」ボタンでデフォルト値をテキストエリアに復元できる（保存は手動）
-- ストレージキー: `template`, `excludedCustomFields`
+- ストレージキー: `template`, `templateEn`, `templateLanguage`, `excludedCustomFields`
 
 #### Teams タブ
 
@@ -244,7 +253,9 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 | 定数 | 用途 |
 |------|------|
-| `DEFAULT_REDMINE_TEMPLATE` | Redmine 定型文 |
+| `DEFAULT_REDMINE_TEMPLATE` | Redmine 定型文（日本語） |
+| `DEFAULT_REDMINE_TEMPLATE_EN` | Redmine 定型文（English） |
+| `DEFAULT_REDMINE_TEMPLATE_LANGUAGE` | 「to MaruCha」でどちらの定型文を使うかの既定値 |
 | `DEFAULT_EXCLUDED_CUSTOM_FIELDS` | 送信対象から除外するカスタムフィールド |
 | `DEFAULT_TEAMS_TEMPLATE` | Teams 定型文 |
 | `DEFAULT_REDMINE_FOR_TR_TEMPLATE` | Redmine for TR 定型文 |
@@ -406,7 +417,9 @@ interface AutoAnswerStatusMessage {
 
 | キー | 型 | 説明 | デフォルト |
 |------|-----|------|-----------|
-| `template` | string | Redmine 定型文 | `shared/defaults.ts` 参照 |
+| `template` | string | Redmine 定型文（日本語） | `shared/defaults.ts` 参照 |
+| `templateEn` | string | Redmine 定型文（English） | `shared/defaults.ts` 参照 |
+| `templateLanguage` | `'ja' \| 'en'` | 「to MaruCha」でどちらの定型文を使うか | `'ja'` |
 | `excludedCustomFields` | string | 送信対象から除外するカスタムフィールド（`cf_XXXX`形式、改行区切り） | `cf_4589`, `cf_4720` |
 | `teamsTemplate` | string | Teams 定型文 | `shared/defaults.ts` 参照 |
 | `teamsPeriodDays` | number | Teams 収集期間（日数） | 14 |

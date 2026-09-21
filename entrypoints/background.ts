@@ -5,7 +5,7 @@
  * TODO: AI_CHAT_URL を実際のAIチャットの新規チャットURLに変更すること
  */
 
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from './shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -41,10 +41,22 @@ async function handleMessage(message: unknown, sender: Browser.runtime.MessageSe
   // source に応じて適切なテンプレートを取得
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
+    templateEn: DEFAULT_REDMINE_TEMPLATE_EN,
+    templateLanguage: DEFAULT_REDMINE_TEMPLATE_LANGUAGE,
     teamsTemplate: DEFAULT_TEAMS_TEMPLATE,
     teamsPeriodDays: 14,
     redmineForTrTemplate: DEFAULT_REDMINE_FOR_TR_TEMPLATE,
   });
+
+  // 「to MaruCha」は日本語話者向け・英語話者向けの2種類の定型文を切り替えて使う
+  const redmineTemplate =
+    result.templateLanguage === 'en'
+      ? typeof result.templateEn === 'string'
+        ? result.templateEn
+        : DEFAULT_REDMINE_TEMPLATE_EN
+      : typeof result.template === 'string'
+        ? result.template
+        : DEFAULT_REDMINE_TEMPLATE;
 
   let template =
     source === 'teams'
@@ -55,9 +67,7 @@ async function handleMessage(message: unknown, sender: Browser.runtime.MessageSe
         ? typeof result.redmineForTrTemplate === 'string'
           ? result.redmineForTrTemplate
           : DEFAULT_REDMINE_FOR_TR_TEMPLATE
-        : typeof result.template === 'string'
-          ? result.template
-          : DEFAULT_REDMINE_TEMPLATE;
+        : redmineTemplate;
 
   // {日数} を実際の収集日数に置換（Teamsテンプレートのみ有効）
   if (source === 'teams') {
