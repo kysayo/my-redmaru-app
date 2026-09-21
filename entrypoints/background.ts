@@ -7,11 +7,12 @@
 
 import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
+import { splitBilingualAnswer } from './shared/splitBilingualAnswer';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
 const ISOU_FORM_URL = 'https://mrint.marubeni.co.jp/TAS/contents/transaction/T011.aspx';
 const REDMINE_BASE_URL = 'https://misol-dev.cloud.redmine.jp';
-const AI_ANSWER_CUSTOM_FIELDS = { updatedAt: 4588, answer: 4589 };
+const AI_ANSWER_CUSTOM_FIELDS = { updatedAt: 4588, answer: 4589, answerEn: 4720 };
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(handleMessage);
@@ -151,6 +152,7 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
     const { issueId, apiKey, answerText } = payload;
     try {
       const now = formatDateTimeJst(new Date());
+      const { ja, en } = splitBilingualAnswer(answerText);
       const res = await fetch(`${REDMINE_BASE_URL}/issues/${issueId}.json`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Redmine-API-Key': apiKey },
@@ -158,7 +160,8 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
           issue: {
             custom_fields: [
               { id: AI_ANSWER_CUSTOM_FIELDS.updatedAt, value: now },
-              { id: AI_ANSWER_CUSTOM_FIELDS.answer, value: answerText },
+              { id: AI_ANSWER_CUSTOM_FIELDS.answer, value: ja },
+              { id: AI_ANSWER_CUSTOM_FIELDS.answerEn, value: en },
             ],
           },
         }),

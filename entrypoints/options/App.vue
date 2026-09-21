@@ -294,8 +294,8 @@ async function saveAiAnswer() {
   <section v-if="activeTab === 'ai-answer'">
     <p style="font-size: 13px; color: #666; margin: 4px 0 16px;">
       「AI回答更新」ボタンでAIチャットに送信する際にチケット情報の前に追加される文章です。<br>
-      AIの回答テキストはそのままRedmineのカスタムフィールド（cf_4589）に保存されるため、<br>
-      前置き・挨拶・Markdown装飾を避けた地の文で出力させる指示にしてください。<br>
+      AIの回答テキストは「■■English■■」を区切りに日本語部分・英語部分に分割され、そのままRedmineのカスタムフィールド（cf_4589・cf_4720）に保存されるため、<br>
+      前置き・挨拶・Markdown装飾を避けた地の文で出力させ、「■■English■■」区切りで日本語→英語の順に回答させる指示にしてください。<br>
       チケットのステータスが<strong>クローズ扱い</strong>（Redmineのステータス設定の「終了」フラグ）かどうかで、下の2つの定型文を自動的に使い分けます。<br>
       Text added before the ticket content when sending via the "AI回答更新" button. The AI's raw response is stored directly into a Redmine custom field.
     </p>

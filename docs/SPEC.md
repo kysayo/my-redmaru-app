@@ -43,7 +43,7 @@ Redmine のチケット情報、および Microsoft Teams のチャット履歴�
   - APIキーは既存の `ViewCustomize.context.user.apiKey`（MAIN World ブリッジ経由）をそのまま使う。操作しているユーザー自身の権限で取得するため、子チケットが閲覧権限のないプロジェクトに属する場合はRedmine側の権限に従って結果から除外される
   - 取得に失敗した場合は `console.warn` を出したうえで子チケットなし扱いとして続行する（クローズ判定と同様、この情報が無くても要約自体は成立するため、1件のAPIエラーで処理全体を止めないことを優先する）
 - `formatTicketInfo()` の `childIssues` オプションで受け取り、`子チケット:` セクションとして `#{id}: {subject}` の形式で1行ずつ出力する（カスタムフィールドの後、コメントの前に挿入）
-- デフォルトの定型文（「to MaruCha」「AI回答」オープン・クローズの3種）には「子チケットがある場合は存在することを簡単に記載してください」という指示を追加している
+- デフォルトの定型文には子チケットの存在を記載させる指示を追加している。「to MaruCha」「AI回答（オープン）」は「子チケットがある場合は存在することを簡単に記載してください」、「AI回答（クローズ）」は項目形式のため「子チケットがある場合は存在することを【問い合わせ概要】に記載してください」と項目を指定する文言になっている
 
 #### to MaruChaの定型文の言語切り替え
 
@@ -142,8 +142,10 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
   - **メッセージリスナーの設計**: `aichat.content.ts` の `onMessage` リスナーはあえて非同期関数にしない（fire-and-forget）。async関数にして`AUTO_ANSWER_START`の処理（最大90秒かかりうる）を`await`すると、ブラウザは「非同期で応答する」とみなしてメッセージチャンネルを開いたままにするが、その間にMV3のService Workerが休止・再起動すると「メッセージチャンネルが応答前に閉じられた」というエラーが発生する（実害はないが不要なエラーログが出る）。応答を必要としないメッセージなので、リスナー自体は同期的に`undefined`を返し、処理は内部で投げっぱなしにする。
 - **書き戻し**: `background.ts` が `fetch` で直接 `PUT /issues/{id}.json` を実行する（別タブでのDOM操作は不要）。書き戻しには `wxt.config.ts` の `host_permissions`（`https://misol-dev.cloud.redmine.jp/*`）が必要（Service Workerからのクロスオリジンfetchのため、content script内fetchとは異なりCORSバイパスに`host_permissions`の明示宣言が必須）。
   - `cf_4588`（AI更新日時、テキスト型）: フォーマットは `YYYY-MM-DD HH:mm:ss`（`entrypoints/shared/dateFormat.ts` の `formatDateTimeJst` で生成、ブラウザのローカルタイム=JST前提）。
-  - `cf_4589`（AI回答、長いテキスト型）: AIの回答テキストそのもの。
-  - **`cf_4588`と`cf_4589`は同一PUTリクエストで同時に書き込む**（別リポジトリ `view-customize` 側の鮮度判定ロジックが `updated_on` と `cf_4588` を比較するため、別々に書くと直後に誤って「古い」と判定されてしまう。詳細は `docs/handoff-ai-answer-automation.md` 参照）。
+  - `cf_4589`（AI回答、長いテキスト型）: AIの回答テキストのうち日本語部分。
+  - `cf_4720`（AI回答英語、長いテキスト型）: AIの回答テキストのうち英語部分。
+  - **AI回答は日本語部分・英語部分に分割してcf_4589・cf_4720に格納する**: 「AI回答」タブの定型文（オープン・クローズ両方）は「まず日本語で次に英語で回答し、区切りに`■■English■■`を使うこと」をAIに指示している。`entrypoints/shared/splitBilingualAnswer.ts` の `splitBilingualAnswer()` がAIの回答テキストをこの区切り文字列で前後に分割し、前半をcf_4589、後半をcf_4720に振り分ける（前後の空白はtrimする）。区切り文字列が見つからない場合（AIが指示に従わなかった等）は、全文をcf_4589に格納しcf_4720は空文字で上書きする（古い英語回答が残り続ける事故を避けるため、区切りが無い場合もcf_4720は必ず明示的に上書きする）。
+  - **`cf_4588`・`cf_4589`・`cf_4720`は同一PUTリクエストで同時に書き込む**（別リポジトリ `view-customize` 側の鮮度判定ロジックが `updated_on` と `cf_4588` を比較するため、別々に書くと直後に誤って「古い」と判定されてしまう。詳細は `docs/handoff-ai-answer-automation.md` 参照）。
 - **書き戻し後のRedmineページ反映**: カスタムフィールドの表示はサーバーレンダリングのため、ページを再読み込みしないと画面には反映されない。回答生成の待機中（最大90秒）にユーザーが同じタブでコメント入力等の未保存作業をしている可能性があるため、**自動リロードはしない**。書き戻し成功時はボタンラベルが「更新完了（クリックで再読込）」になり、ユーザーが任意のタイミングでクリックすると `location.reload()` される（`pendingReload` フラグで制御）。
 - **AIチャットタブの扱い**: 書き戻し成功時は自動でタブを閉じる。失敗・タイムアウト時はデバッグしやすくするためタブを残す。
   - ただし `autoAnswerFocusTabOnSuccess` がオフの場合は閉じずに `about:blank` へ遷移させるだけにする（詳細は次項）。
@@ -242,6 +244,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 
 - 「AI回答更新」ボタン用の定型文を2つ（オープン中のチケット用・クローズ済みのチケット用）テキストエリアで編集・保存できる。保存ボタンは1つで両方をまとめて保存する
 - どちらが使われるかはチケットのステータスがクローズ扱いかどうかで自動的に決まる（「AI回答自動更新」節参照）
+- デフォルトの定型文はいずれも「まず日本語で、次に英語で回答し、区切りに`■■English■■`を使う」ことをAIに指示している。この指示を編集・削除すると、区切りが見つからずcf_4720が空文字で上書きされ続ける点に注意（詳細は「AI回答自動更新」節の書き戻し仕様を参照）
 - 書き戻し成功時にRedmineタブを自動でアクティブにするかをチェックボックスで設定できる
 - AI回答の生成完了を待つタイムアウト秒数を数値入力で設定できる（デフォルト: 90秒）
 - AIチャットタブをバックグラウンド（非アクティブ）で開くかをチェックボックスで設定できる（デフォルト: オフ）
@@ -287,6 +290,7 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `entrypoints/shared/isouMapping.ts` | 共有モジュール | フォームマッピング設定文字列のパース関数（`parseIsouMapping`） |
 | `entrypoints/shared/aichatDom.ts` | 共有モジュール | AIチャットの送信ボタンクリック・生成完了検知（`waitForAnswerComplete`）・回答抽出（`getLatestAnswerText`）のDOM操作ヘルパー |
 | `entrypoints/shared/dateFormat.ts` | 共有モジュール | `cf_4588` 用の `YYYY-MM-DD HH:mm:ss` 形式日時文字列を生成する `formatDateTimeJst` |
+| `entrypoints/shared/splitBilingualAnswer.ts` | 共有モジュール | AI回答テキストを`■■English■■`区切りで日本語部分・英語部分に分割する `splitBilingualAnswer`（cf_4589・cf_4720への振り分けに使用） |
 | `entrypoints/shared/customFieldFilter.ts` | 共有モジュール | 設定ページの「除外するカスタムフィールド」テキストから対象IDを抽出する `parseExcludedCustomFieldIds` |
 
 ### メッセージプロトコル
@@ -404,7 +408,7 @@ interface AutoAnswerStatusMessage {
                 ├─ 送信ボタンをクリック
                 ├─ waitForAnswerComplete（MutationObserver + debounce + 90秒timeout）
                 └─ background.ts へ AUTO_ANSWER_RESULT 送信
-                     ├─ success: PUT /issues/{id}.json で cf_4588・cf_4589 を同時書き込み
+                     ├─ success: 回答を■■English■■で日本語/英語に分割 → PUT /issues/{id}.json で cf_4588・cf_4589・cf_4720 を同時書き込み
                      │    ├─ 成功: AIチャットタブを閉じる → 元タブへ AUTO_ANSWER_STATUS(done)
                      │    └─ 失敗: タブを残す → 元タブへ AUTO_ANSWER_STATUS(error)
                      └─ timeout/error: タブを残す → 元タブへ AUTO_ANSWER_STATUS(timeout/error)
