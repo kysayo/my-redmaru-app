@@ -35,8 +35,8 @@ function handleMessage(message: unknown): void {
 }
 
 async function handleAutoAnswerStart(payload: AutoAnswerStartMessage['payload']) {
-  const { requestId, text, issueId, apiKey, redmineTabId, timeoutMs } = payload;
-  console.log('[redmaru] AUTO_ANSWER_START受信', { requestId, issueId, url: location.href, timeoutMs });
+  const { requestId, text, issueId, apiKey, redmineTabId, timeoutMs, source, job } = payload;
+  console.log('[redmaru] AUTO_ANSWER_START受信', { requestId, issueId, url: location.href, timeoutMs, source, job });
 
   try {
     const inputEl = await insertTextToChat(text);
@@ -60,14 +60,14 @@ async function handleAutoAnswerStart(payload: AutoAnswerStartMessage['payload'])
     if (result.status === 'timeout') {
       await browser.runtime.sendMessage({
         type: 'AUTO_ANSWER_RESULT',
-        payload: { requestId, redmineTabId, status: 'timeout' },
+        payload: { requestId, redmineTabId, source, job, status: 'timeout' },
       });
       return;
     }
 
     await browser.runtime.sendMessage({
       type: 'AUTO_ANSWER_RESULT',
-      payload: { requestId, redmineTabId, issueId, apiKey, status: 'success', answerText: result.text },
+      payload: { requestId, redmineTabId, source, job, issueId, apiKey, status: 'success', answerText: result.text },
     });
   } catch (err) {
     console.error('[redmaru] AI回答自動化エラー:', err);
@@ -76,6 +76,8 @@ async function handleAutoAnswerStart(payload: AutoAnswerStartMessage['payload'])
       payload: {
         requestId,
         redmineTabId,
+        source,
+        job,
         status: 'error',
         message: err instanceof Error ? err.message : String(err),
       },
@@ -158,9 +160,14 @@ interface AutoAnswerStartMessage {
     text: string;
     issueId: string;
     apiKey: string;
-    redmineTabId: number;
+    // 完了通知の宛先タブ。バッチ経路（Redmineのタブを開かない）では存在しないため省略可能
+    redmineTabId?: number;
     // 回答生成の完了待ちタイムアウト（ミリ秒）。古いbackground.jsとの互換のため省略可能
     timeoutMs?: number;
+    // このcontent scriptは中身を解釈せず、AUTO_ANSWER_RESULTにそのまま載せて返すだけ。
+    // MV3のService Workerが休止してもジョブ種別が失われないようpayloadでリレーしている。
+    source?: 'redmine' | 'batch';
+    job?: 'full' | 'translate-en';
   };
 }
 
@@ -173,7 +180,6 @@ function isAutoAnswerStartMessage(msg: unknown): msg is AutoAnswerStartMessage {
     typeof m.payload?.requestId === 'string' &&
     typeof m.payload?.text === 'string' &&
     typeof m.payload?.issueId === 'string' &&
-    typeof m.payload?.apiKey === 'string' &&
-    typeof m.payload?.redmineTabId === 'number'
+    typeof m.payload?.apiKey === 'string'
   );
 }

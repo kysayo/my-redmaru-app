@@ -153,7 +153,13 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
   - **AIチャットタブを閉じる操作自体もフォーカス奪取の経路になる**: `focusTab()` を呼ばないようにしても、書き戻し成功時に `chrome.tabs.remove()` でAIチャットタブを閉じると、そのウィンドウ内のアクティブタブ切り替えに伴ってウィンドウがOSレベルで前面化してしまう事象が実機で確認された（Windows）。そのため `autoAnswerFocusTabOnSuccess` がオフのときは、タブを閉じる代わりに `browser.tabs.update(aichatTabId, { url: 'about:blank' })` で遷移させるだけにとどめ、クローズに伴うタブ切り替えを起こさないようにしている（この場合AIチャットタブは閉じずに残り続けるため、蓄積する点は許容している）。
   - **さらにタブ作成時点でもフォーカスが奪われる**: 上記の対策後も、Playwrightバッチで他アプリ（Teams等）を操作している最中にAIチャットの回答受信タイミングでブラウザが前面化する事象が報告された。原因は、AIチャットタブがそもそも `browser.tabs.create({ url: AI_CHAT_URL })`（`active` 未指定＝既定で `true`）としてアクティブな状態で作られており、その**アクティブなタブ**に対して閉じる・URLを変えるといった操作をすること自体がウィンドウの前面化を招いていたためと考えられる。対策として設定ページの「AI回答」タブに独立したチェックボックス（ストレージキー: `openAiChatTabInBackground`、デフォルト `false`）を追加し、オンの場合は `browser.tabs.create({ url: AI_CHAT_URL, active: false })` としてAIチャットタブを最初から非アクティブ（バックグラウンド）で開く。既存の動作に影響させないため既定はオフとし、`autoAnswerFocusTabOnSuccess` とは独立した設定にしている。認証（RedmineのAPIキー取得は関係ないが、AIチャット側のSSOセッション切れ）が発生した場合にバックグラウンドタブがログイン画面のまま気づかれない可能性があるが、Playwrightバッチは単独ユーザー利用を前提としており、認証切れによる個別チケットの失敗は許容している（自動検知・自動アクティブ化のフォールバックは設けない）。
 - **ボタンのフィードバック**: alert()は使わず、ボタンラベルの変化（`取得中...` → `AI回答待ち...` → `更新完了`/`タイムアウト`/`エラー`）で結果を伝える。多重クリックはモジュールスコープの `inFlightRequestId` で防止する。
-- **Playwrightバッチとの関係**: このボタンのクリック起点フロー自体が、鮮度切れチケットを一括処理するPlaywrightバッチ（別リポジトリ [redmaru-batch](https://github.com/kysayo/redmaru-batch)、本リポジトリ外）からも再利用されている。拡張機能側にPlaywright専用のコードパスは作らない。バッチ側の完了検知は本機能の `AUTO_ANSWER_STATUS` 通知に依存せず、Redmine REST APIのポーリングで行う設計。バッチ側の仕様・設計判断の詳細は `redmaru-batch` リポジトリの `docs/spec.md` を参照。
+- **Playwrightバッチとの関係**: 鮮度切れチケットを一括処理するPlaywrightバッチ（別リポジトリ [redmaru-batch](https://github.com/kysayo/redmaru-batch)、本リポジトリ外）と組み合わせて使う。当初は「拡張機能側にPlaywright専用のコードパスは作らない」方針で、バッチ側がこのボタンをクリックし、完了検知も `AUTO_ANSWER_STATUS` に依存せずRedmine REST APIのポーリングで独立して行っていた。
+
+  しかし**バッチ実行中にブラウザが前面に出てくる問題が解消しきらなかった**。上記のタブ制御の対策（`autoAnswerFocusTabOnSuccess` / `openAiChatTabInBackground`）はいずれも拡張機能側の操作が原因のケースに対するもので、残る原因は**バッチ側の `button.click()` そのもの**だった。Playwrightのクリックは実際のマウスイベントを送るため、Chromiumが対象ページをアクティブ化する。これは拡張機能側の設定では止められない。
+
+  そこで方針を変更し、バッチ専用ページ `entrypoints/batch`（`chrome-extension://<id>/batch.html`）を追加した。Playwrightからは `page.evaluate()` でページ内APIを呼ぶだけになり、クリックが発生しないためフォーカスを奪う経路自体がなくなる。Redmineのチケットページも開かない（Redmineへの読み書きはすべてAPIキー経由のため不要）。ただし**書き戻しは従来どおり `background.ts` に集約**しており、単発ボタンとバッチが同じコードパスを通る点は変えていない。これは片方だけ直して挙動がずれる事故を防ぐため。詳細は「バッチ タブ」節とフロー図を参照。
+
+  なお従来のクリック方式（`redmaru-batch` の `npm run batch`）も動作するまま残してある。バッチ側の仕様・設計判断の詳細は `redmaru-batch` リポジトリの `docs/spec.md` を参照。
 
 ### AI チャット側（移送申請ボタン）
 
@@ -250,6 +256,17 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 - AIチャットタブをバックグラウンド（非アクティブ）で開くかをチェックボックスで設定できる（デフォルト: オフ）
 - ストレージキー: `aiAnswerTemplate`, `aiAnswerClosedTemplate`, `autoAnswerFocusTabOnSuccess`, `aiAnswerTimeoutSeconds`, `openAiChatTabInBackground`
 
+#### バッチ タブ
+
+別リポジトリ `redmaru-batch` から複数チケットをまとめて処理する（`npm run batch-direct`）ときの設定。
+
+- 「AIまとめと同じ設定を使う」をオンにすると（デフォルト）、「AI回答」タブの定型文をそのまま使い、単発の「AI回答更新」ボタンと同じ処理（日英まとめを生成して cf_4588・cf_4589・cf_4720 を同時更新）を行う。通常運用はこちら
+- オフにすると、このタブの定型文と書き戻し先を使う。書き戻し先は「cf_4720のみ更新」（デフォルト）と「cf_4589・cf_4720 を `■■English■■` で分割して更新」の2択
+- 「cf_4720のみ」は、バイリンガル対応より前に生成されて英語欄だけが空のチケットに、後から英訳を入れるための設定。この場合AIにはチケット全文ではなく**既存の日本語まとめ（cf_4589）だけ**が渡される（日本語版と内容がずれず、入力も短くて済むため）
+- どちらの書き戻し先でも cf_4588（AI更新日時）は同時に更新される。更新しないとこの書き込みでチケットの `updated_on` だけが進み、直後に「鮮度切れ」と誤判定されるため
+- **どのチケットを対象にするかはこのタブでは設定しない**。対象の抽出は `redmaru-batch` 側（`config.json` の `issuesListUrl` と `--target=` オプション）で行う
+- ストレージキー: `batchUseAiAnswerSettings`, `batchWriteback`, `batchTemplate`
+
 #### デフォルト値を変更する場合
 
 `entrypoints/shared/defaults.ts` の各定数を編集する。このファイルが `background.ts`・`options/App.vue`・各 Content Script からインポートされているため、1箇所の変更で反映される。
@@ -268,6 +285,9 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS` | AI回答自動更新 書き戻し成功時のRedmineタブフォーカス可否 |
 | `DEFAULT_AI_ANSWER_TIMEOUT_SECONDS` | AI回答生成の完了待ちタイムアウト秒数 |
 | `DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND` | AIチャットタブを非アクティブで開くかの既定値 |
+| `DEFAULT_BATCH_USE_AI_ANSWER_SETTINGS` | バッチ実行で「AI回答」タブの設定をそのまま使うかの既定値 |
+| `DEFAULT_BATCH_WRITEBACK` | バッチ実行の書き戻し先の既定値（`translate-en`） |
+| `DEFAULT_BATCH_TEMPLATE` | バッチ実行 定型文（既定は cf_4589 を英訳させる指示） |
 
 ---
 
@@ -284,9 +304,11 @@ Redmineチケットページの「AI回答更新」ボタンをクリックす�
 | `entrypoints/maruchat-focus.content.ts` | Content Script（Isolated World） | AI チャット画面のボタン注入（拡大縮小・末尾移動・移送申請）・チャット回答解析 |
 | `entrypoints/isou.content.ts` | Content Script（Isolated World） | 移送申請フォームへの自動入力（Phase 1/2 制御） |
 | `entrypoints/isou-bridge.content.ts` | Content Script（MAIN World） | `__doPostBack` 呼び出しを Isolated World から受け取り実行する |
-| `entrypoints/background.ts` | Background Service Worker | メッセージ仲介・タブ管理・定型文結合 |
-| `entrypoints/options/` | Options Page（Vue 3） | Redmine / Teams / Redmine for TR / 移送申請フォーム 設定 UI（タブ切り替え） |
+| `entrypoints/background.ts` | Background Service Worker | メッセージ仲介・タブ管理・定型文結合・Redmineへの書き戻し |
+| `entrypoints/batch/` | 拡張機能ページ（`batch.html`） | `redmaru-batch`（Playwright）から操作されるバッチ専用ページ。Redmineのタブを開かずに`AUTO_ANSWER_REQUEST`を起動する |
+| `entrypoints/options/` | Options Page（Vue 3） | Redmine / Teams / Redmine for TR / 移送申請フォーム / AI回答 / バッチ 設定 UI（タブ切り替え） |
 | `entrypoints/shared/defaults.ts` | 共有モジュール | デフォルト定型文・デフォルトフォームマッピングの定義を1箇所で管理 |
+| `entrypoints/shared/redmineIssue.ts` | 共有モジュール | チケット取得（`fetchIssue` / `fetchChildIssues`）・クローズ判定（`isClosedIssue`）・AIに渡すテキストの整形（`formatTicketInfo`）。redmine.content.ts とバッチページが共用する |
 | `entrypoints/shared/isouMapping.ts` | 共有モジュール | フォームマッピング設定文字列のパース関数（`parseIsouMapping`） |
 | `entrypoints/shared/aichatDom.ts` | 共有モジュール | AIチャットの送信ボタンクリック・生成完了検知（`waitForAnswerComplete`）・回答抽出（`getLatestAnswerText`）のDOM操作ヘルパー |
 | `entrypoints/shared/dateFormat.ts` | 共有モジュール | `cf_4588` 用の `YYYY-MM-DD HH:mm:ss` 形式日時文字列を生成する `formatDateTimeJst` |
@@ -321,11 +343,21 @@ interface AutoAnswerRequestMessage {
     requestId: string;   // crypto.randomUUID()
     issueId: string;
     apiKey: string;
-    content: string;     // formatTicketInfo() の戻り値
+    content: string;     // formatTicketInfo() の戻り値（job='translate-en' では cf_4589 の値のみ）
     isClosed?: boolean;  // クローズ扱いのステータスか（定型文の切り替えに使用）
+    // 以下は省略可能。未指定なら従来どおり 'redmine' / 'full' として扱う
+    source?: 'redmine' | 'batch';  // 'batch' はバッチ専用ページからの実行
+    job?: 'full' | 'translate-en'; // 書き戻しの種類
   };
 }
 ```
+
+`AUTO_ANSWER_REQUEST` の送信元は、Redmineのチケットページ（`redmine.content.ts`）とバッチ専用ページ（`entrypoints/batch`）の2つがある。`source='batch'` の場合、background.ts は以下の点で挙動を変える。
+
+- 送信元のタブIDを要求しない（バッチ経路ではRedmineのタブが存在しないため）
+- AIチャットタブを `openAiChatTabInBackground` 設定に関わらず非アクティブで開く
+- 書き戻し成功時にタブを前面化しない（`focusTab()` を呼ばない）
+- 完了通知を `tabs.sendMessage` ではなく `runtime.sendMessage` でブロードキャストする
 
 #### background.ts → aichat.content.ts
 
@@ -339,24 +371,29 @@ interface AutoAnswerStartMessage {
   type: 'AUTO_ANSWER_START';
   payload: {
     requestId: string;
-    text: string;         // aiAnswerTemplate（またはaiAnswerClosedTemplate） + '\n\n' + content
+    text: string;          // 定型文 + '\n\n' + content
     issueId: string;
     apiKey: string;
-    redmineTabId: number; // ステートレス中継のため運ぶ
-    timeoutMs?: number;   // 回答生成の完了待ちタイムアウト（aiAnswerTimeoutSeconds由来、省略時は90000）
+    redmineTabId?: number; // ステートレス中継のため運ぶ。バッチ経路では存在しない
+    timeoutMs?: number;    // 回答生成の完了待ちタイムアウト（aiAnswerTimeoutSeconds由来、省略時は90000）
+    source?: 'redmine' | 'batch';   // 解釈せずAUTO_ANSWER_RESULTへ運ぶだけ
+    job?: 'full' | 'translate-en';  // 同上
   };
 }
 ```
+
+MV3のService Workerは休止するため `requestId` ごとの状態を保持できない。`source` / `job` は `redmineTabId` と同じくpayloadに載せて往復させている。
 
 #### aichat.content.ts → background.ts
 
 ```typescript
 type AutoAnswerResultMessage = {
   type: 'AUTO_ANSWER_RESULT';
-  payload:
-    | { requestId: string; redmineTabId: number; issueId: string; apiKey: string; status: 'success'; answerText: string }
-    | { requestId: string; redmineTabId: number; status: 'timeout' }
-    | { requestId: string; redmineTabId: number; status: 'error'; message: string };
+  payload: { redmineTabId?: number; source?: 'redmine' | 'batch'; job?: 'full' | 'translate-en' } & (
+    | { requestId: string; issueId: string; apiKey: string; status: 'success'; answerText: string }
+    | { requestId: string; status: 'timeout' }
+    | { requestId: string; status: 'error'; message: string }
+  );
 };
 ```
 
@@ -413,6 +450,22 @@ interface AutoAnswerStatusMessage {
                      │    └─ 失敗: タブを残す → 元タブへ AUTO_ANSWER_STATUS(error)
                      └─ timeout/error: タブを残す → 元タブへ AUTO_ANSWER_STATUS(timeout/error)
                           └─ redmine.content.ts がボタンラベルを更新（alertは使わない）
+
+[batch.html]（redmaru-batch からのバッチ実行。Redmineのタブは開かない）
+  └─ Playwright が page.evaluate() で window.redmaruBatch.run(issueId, apiKey, baseUrl) を呼ぶ
+      ├─ 「バッチ」タブの設定から job を決定（AIまとめと同じ → 'full' / それ以外 → batchWriteback）
+      ├─ job='translate-en' … content は cf_4589 の値のみ
+      │  job='full'         … content は formatTicketInfo()（子チケット・クローズ判定も行う）
+      └─ background.ts へ AUTO_ANSWER_REQUEST 送信 (source: 'batch', job)
+           ├─ job に応じて batchTemplate / aiAnswerTemplate(Closed) を取得して結合
+           └─ AIチャットタブ（常に非アクティブ）→ AUTO_ANSWER_START 送信 (source, job を同梱)
+                └─ background.ts へ AUTO_ANSWER_RESULT 送信（source, job を持ち回る）
+                     ├─ success: job で書き戻しを分岐して PUT /issues/{id}.json
+                     │    ├─ 'full'         … ■■English■■で分割し cf_4588・cf_4589・cf_4720
+                     │    └─ 'translate-en' … cf_4588・cf_4720 のみ（cf_4589 は触らない）
+                     │    └─ AIチャットタブを閉じる（非アクティブなので前面化しない）
+                     └─ AUTO_ANSWER_STATUS を runtime.sendMessage でブロードキャスト
+                          └─ batch.html が requestId で受け取り、Playwright が waitForFunction で回収
 ```
 
 ### ストレージ構造
@@ -434,6 +487,9 @@ interface AutoAnswerStatusMessage {
 | `autoAnswerFocusTabOnSuccess` | boolean | AI回答自動更新の書き戻し成功時にRedmineタブをアクティブ化するか | `true` |
 | `aiAnswerTimeoutSeconds` | number | AI回答生成の完了待ちタイムアウト秒数 | 90 |
 | `openAiChatTabInBackground` | boolean | AIチャットタブを非アクティブ（バックグラウンド）で開くか | `false` |
+| `batchUseAiAnswerSettings` | boolean | バッチ実行で「AI回答」タブの設定をそのまま使うか | `true` |
+| `batchWriteback` | `'full' \| 'translate-en'` | バッチ実行の書き戻し先（上がオフのときのみ有効） | `'translate-en'` |
+| `batchTemplate` | string | バッチ実行 定型文（上がオフのときのみ有効） | `shared/defaults.ts` 参照 |
 
 **chrome.storage.local**（処理中の一時データ）
 

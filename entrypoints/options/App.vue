@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_EXCLUDED_CUSTOM_FIELDS } from '../shared/defaults';
+import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_ISOU_FIELD_MAPPING, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_EXCLUDED_CUSTOM_FIELDS, DEFAULT_BATCH_USE_AI_ANSWER_SETTINGS, DEFAULT_BATCH_WRITEBACK, DEFAULT_BATCH_TEMPLATE, type BatchWriteback } from '../shared/defaults';
 
-type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer';
+type TabKey = 'redmine' | 'teams' | 'redmine-tr' | 'isou-tr' | 'ai-answer' | 'batch';
 
 const activeTab = ref<TabKey>('redmine');
 
@@ -34,6 +34,12 @@ const aiAnswerTimeoutSeconds = ref(90);
 const openAiChatTabInBackground = ref(false);
 const aiAnswerSaved = ref(false);
 
+// バッチタブの状態
+const batchUseAiAnswerSettings = ref(true);
+const batchWriteback = ref<BatchWriteback>('translate-en');
+const batchTemplate = ref('');
+const batchSaved = ref(false);
+
 onMounted(async () => {
   const result = await browser.storage.sync.get({
     template: DEFAULT_REDMINE_TEMPLATE,
@@ -49,6 +55,9 @@ onMounted(async () => {
     autoAnswerFocusTabOnSuccess: DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS,
     aiAnswerTimeoutSeconds: DEFAULT_AI_ANSWER_TIMEOUT_SECONDS,
     openAiChatTabInBackground: DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND,
+    batchUseAiAnswerSettings: DEFAULT_BATCH_USE_AI_ANSWER_SETTINGS,
+    batchWriteback: DEFAULT_BATCH_WRITEBACK,
+    batchTemplate: DEFAULT_BATCH_TEMPLATE,
   });
   redmineTemplate.value = result.template as string;
   redmineTemplateEn.value = result.templateEn as string;
@@ -63,6 +72,9 @@ onMounted(async () => {
   autoAnswerFocusTabOnSuccess.value = result.autoAnswerFocusTabOnSuccess as boolean;
   openAiChatTabInBackground.value = result.openAiChatTabInBackground as boolean;
   aiAnswerTimeoutSeconds.value = result.aiAnswerTimeoutSeconds as number;
+  batchUseAiAnswerSettings.value = result.batchUseAiAnswerSettings as boolean;
+  batchWriteback.value = result.batchWriteback as BatchWriteback;
+  batchTemplate.value = result.batchTemplate as string;
 });
 
 async function saveRedmine() {
@@ -116,6 +128,20 @@ async function saveAiAnswer() {
   aiAnswerSaved.value = true;
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
 }
+
+async function saveBatch() {
+  await browser.storage.sync.set({
+    batchUseAiAnswerSettings: batchUseAiAnswerSettings.value,
+    batchWriteback: batchWriteback.value,
+    batchTemplate: batchTemplate.value,
+  });
+  batchSaved.value = true;
+  setTimeout(() => { batchSaved.value = false; }, 2000);
+}
+
+function resetBatchTemplate() {
+  batchTemplate.value = DEFAULT_BATCH_TEMPLATE;
+}
 </script>
 
 <template>
@@ -156,6 +182,13 @@ async function saveAiAnswer() {
       @click="activeTab = 'ai-answer'"
     >
       AI回答
+    </button>
+    <button
+      class="tab-btn"
+      :class="{ active: activeTab === 'batch' }"
+      @click="activeTab = 'batch'"
+    >
+      バッチ
     </button>
   </nav>
 
@@ -357,5 +390,61 @@ async function saveAiAnswer() {
 
     <button @click="saveAiAnswer">保存 / Save</button>
     <p v-if="aiAnswerSaved" class="saved-msg">保存しました / Saved</p>
+  </section>
+
+  <section v-if="activeTab === 'batch'">
+    <p style="font-size: 13px; color: #666; margin: 4px 0 16px;">
+      <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">redmaru-batch</code>
+      から複数チケットをまとめて処理するときの設定です。Redmineのチケット画面を開かずに処理するため、実行中もブラウザが前面に出てきません。<br>
+      <strong>どのチケットを対象にするかはredmaru-batch側のコマンドで指定します</strong>（鮮度切れのみ／AI回答(英語)が空のもの、など）。ここではAIへの頼み方と書き戻し先だけを設定します。<br>
+      Settings for batch runs driven by redmaru-batch. Which tickets are targeted is specified on the redmaru-batch side.
+    </p>
+
+    <label style="display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" v-model="batchUseAiAnswerSettings">
+      AIまとめと同じ設定を使う / Use the same settings as "AI回答"
+    </label>
+    <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+      オンにすると「AI回答」タブの定型文をそのまま使い、単発の「AI回答更新」ボタンと同じ処理（日本語・英語のまとめを生成してcf_4588・cf_4589・cf_4720を同時更新）を行います。<br>
+      通常運用はこちらです。オフにすると下の設定を使います。
+    </p>
+
+    <template v-if="!batchUseAiAnswerSettings">
+      <label style="margin-top: 16px;">書き戻し先 / Write-back target</label>
+      <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+        <code style="background:#f0f0f0; padding: 1px 4px; border-radius: 3px;">cf_4720のみ</code>
+        は、AI回答(英語)が未設定のチケットに後から英訳だけを入れるための設定です。日本語まとめ（cf_4589）は書き換えません。<br>
+        どちらを選んでもAI更新日時（cf_4588）は同時に更新されます（更新しないとチケットの更新日時だけが進んで「鮮度切れ」と誤判定されるため）。
+      </p>
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+        <input type="radio" value="translate-en" v-model="batchWriteback">
+        cf_4720（AI回答(英語)）のみ更新する
+      </label>
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+        <input type="radio" value="full" v-model="batchWriteback">
+        cf_4589・cf_4720 を「■■English■■」で分割して更新する（AIまとめと同じ書き戻し）
+      </label>
+
+      <label for="batch-template" style="margin-top: 16px;">定型文 / Template</label>
+      <p style="font-size: 13px; color: #666; margin: 4px 0 8px;">
+        「cf_4720のみ」を選んだ場合、AIにはチケット全文ではなく<strong>既存の日本語まとめ（cf_4589）だけ</strong>が渡されます。日本語版と内容がずれず、入力も短くて済むためです。<br>
+        回答はそのままカスタムフィールドに保存されるので、前置き・挨拶・Markdown装飾を出力させない指示にしてください。
+      </p>
+      <textarea
+        id="batch-template"
+        v-model="batchTemplate"
+        rows="8"
+      />
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+        <button @click="saveBatch">保存 / Save</button>
+        <button @click="resetBatchTemplate" style="background: #757575;">定型文をデフォルトに戻す</button>
+      </div>
+      <p v-if="batchSaved" class="saved-msg">保存しました / Saved</p>
+    </template>
+
+    <template v-else>
+      <button @click="saveBatch" style="margin-top: 16px;">保存 / Save</button>
+      <p v-if="batchSaved" class="saved-msg">保存しました / Saved</p>
+    </template>
   </section>
 </template>

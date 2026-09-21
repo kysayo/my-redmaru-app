@@ -33,6 +33,24 @@ export const DEFAULT_AI_ANSWER_TIMEOUT_SECONDS = 90;
 // 既存の挙動（アクティブで開く）に影響させないため既定はオフ
 export const DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND = false;
 
+// 「バッチ」タブ: redmaru-batchからの実行で「AI回答」タブの設定をそのまま使うかどうか。
+// 通常運用（鮮度切れチケットのまとめ直し）では単発ボタンと同じ挙動にしたいため既定でオン。
+export const DEFAULT_BATCH_USE_AI_ANSWER_SETTINGS = true;
+
+// 「バッチ」タブ: 上のチェックを外したときに使う書き戻し先。
+// 'full'         … AI回答を■■English■■で分割し cf_4588・cf_4589・cf_4720 を同時更新（AIまとめと同じ）
+// 'translate-en' … AI回答の全文を cf_4720 に入れ、cf_4588 も同時更新。cf_4589 は触らない
+export type BatchWriteback = 'full' | 'translate-en';
+export const DEFAULT_BATCH_WRITEBACK: BatchWriteback = 'translate-en';
+
+// 「バッチ」タブ: 上のチェックを外したときに使う定型文。
+// 既定値は cf_4720（AI回答英語）のバックフィル用。バイリンガル対応より前に生成された
+// チケットは cf_4589 だけが埋まっているため、その日本語まとめを英訳して cf_4720 に入れる。
+// クローズ済みチケットのまとめは【】区切りの項目形式になっているため、項目名の対応も指示する
+// （対応表は DEFAULT_AI_ANSWER_CLOSED_TEMPLATE が指定している英語項目名と揃えてある）。
+export const DEFAULT_BATCH_TEMPLATE =
+  '以下はRedmineチケットのAIによる日本語まとめです。これを英語に翻訳してください。あなたの回答はそのままRedmineのカスタムフィールドに保存されるため、前置き・挨拶・Markdown装飾（見出しや箇条書き記号など）を使わず、翻訳結果の英文のみを出力してください。原文が【】で囲まれた項目に分かれている場合は同じ構成を保ち、項目名は【問い合わせ概要】→【Inquiry Summary】、【事象】→【Issue】、【原因】→【Cause】、【影響範囲】→【Scope of Impact】、【対応内容】→【Action Taken】、【ユーザ対応】→【User Action】、【結果】→【Result】と対応させてください。';
+
 // 送信対象から除外するカスタムフィールド（cf_XXXX形式、改行区切り）のデフォルト値。
 // cf_4589・cf_4720はいずれもRedmine側でAIまとめ用途に使われているカスタムフィールドであり、
 // これらを含めて再度AIに要約させるとAI自身の過去の回答が入力に混ざってしまうため既定で除外する。
