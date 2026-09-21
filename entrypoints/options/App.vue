@@ -129,6 +129,14 @@ async function saveAiAnswer() {
   setTimeout(() => { aiAnswerSaved.value = false; }, 2000);
 }
 
+function resetAiAnswerTemplate() {
+  aiAnswerTemplate.value = DEFAULT_AI_ANSWER_TEMPLATE;
+}
+
+function resetAiAnswerClosedTemplate() {
+  aiAnswerClosedTemplate.value = DEFAULT_AI_ANSWER_CLOSED_TEMPLATE;
+}
+
 async function saveBatch() {
   await browser.storage.sync.set({
     batchUseAiAnswerSettings: batchUseAiAnswerSettings.value,
@@ -339,6 +347,9 @@ function resetBatchTemplate() {
       v-model="aiAnswerTemplate"
       rows="6"
     />
+    <div style="margin-top: 4px;">
+      <button @click="resetAiAnswerTemplate" style="background: #757575;">デフォルトに戻す</button>
+    </div>
 
     <label for="ai-answer-closed-template" style="margin-top: 16px;">
       定型文（クローズ済みのチケット）/ Template (closed)
@@ -351,6 +362,9 @@ function resetBatchTemplate() {
       v-model="aiAnswerClosedTemplate"
       rows="10"
     />
+    <div style="margin-top: 4px;">
+      <button @click="resetAiAnswerClosedTemplate" style="background: #757575;">デフォルトに戻す</button>
+    </div>
 
     <label style="margin-top: 16px; display: flex; align-items: center; gap: 6px;">
       <input type="checkbox" v-model="autoAnswerFocusTabOnSuccess">
