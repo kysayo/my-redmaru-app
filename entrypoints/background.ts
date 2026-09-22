@@ -7,7 +7,7 @@
 
 import { DEFAULT_REDMINE_TEMPLATE, DEFAULT_REDMINE_TEMPLATE_EN, DEFAULT_REDMINE_TEMPLATE_LANGUAGE, DEFAULT_TEAMS_TEMPLATE, DEFAULT_REDMINE_FOR_TR_TEMPLATE, DEFAULT_AI_ANSWER_TEMPLATE, DEFAULT_AI_ANSWER_CLOSED_TEMPLATE, DEFAULT_AUTO_ANSWER_FOCUS_TAB_ON_SUCCESS, DEFAULT_AI_ANSWER_TIMEOUT_SECONDS, DEFAULT_OPEN_AI_CHAT_TAB_IN_BACKGROUND, DEFAULT_BATCH_TEMPLATE } from './shared/defaults';
 import { formatDateTimeJst } from './shared/dateFormat';
-import { splitBilingualAnswer } from './shared/splitBilingualAnswer';
+import { removeBlankLines, splitBilingualAnswer } from './shared/splitBilingualAnswer';
 import { AI_ANSWER_CUSTOM_FIELDS } from './shared/redmineIssue';
 
 const AI_CHAT_URL = 'https://www.marubeni-chatbot.com/bot/smart/smart-bot';
@@ -186,7 +186,7 @@ async function handleAutoAnswerResult(payload: AutoAnswerResultMessage['payload'
         job === 'translate-en'
           ? [
               { id: AI_ANSWER_CUSTOM_FIELDS.updatedAt, value: now },
-              { id: AI_ANSWER_CUSTOM_FIELDS.answerEn, value: answerText.trim() },
+              { id: AI_ANSWER_CUSTOM_FIELDS.answerEn, value: removeBlankLines(answerText.trim()) },
             ]
           : (() => {
               const { ja, en } = splitBilingualAnswer(answerText);

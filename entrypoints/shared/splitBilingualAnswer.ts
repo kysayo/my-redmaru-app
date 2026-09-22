@@ -8,13 +8,24 @@ export interface SplitBilingualAnswerResult {
   en: string;
 }
 
+// Redmineの整形テキストでは空行が段落区切り（別ブロック扱い）になり縦の余白を生むため、
+// AIが改行のみの行を（連続してでも）返してきた場合に備えて丸ごと除去する。
+// 除去しても行自体は残るため、段落間の見た目上の区切りは失われない（Redmine側が
+// 改行のみで改行として表示する設定のため）。
+export function removeBlankLines(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .join('\n');
+}
+
 // 区切り文字列が見つからない場合（AIが指示に従わなかった等）は、全文をjaに入れてenは空文字にする。
 // 古い英語回答をcf_4720に残したまま日本語回答だけ更新される事故を避けるため、enは常に明示的に上書きする。
 export function splitBilingualAnswer(text: string): SplitBilingualAnswerResult {
   const index = text.indexOf(SEPARATOR);
-  if (index === -1) return { ja: text.trim(), en: '' };
+  if (index === -1) return { ja: removeBlankLines(text.trim()), en: '' };
 
-  const ja = text.slice(0, index).trim();
-  const en = text.slice(index + SEPARATOR.length).trim();
+  const ja = removeBlankLines(text.slice(0, index).trim());
+  const en = removeBlankLines(text.slice(index + SEPARATOR.length).trim());
   return { ja, en };
 }
