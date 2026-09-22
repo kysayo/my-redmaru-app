@@ -213,6 +213,9 @@ export type WaitForAnswerResult =
   | { status: 'success'; text: string }
   | { status: 'timeout' };
 
+/** 完了判定のポーリング間隔 */
+const COMPLETION_POLL_INTERVAL_MS = 300;
+
 /**
  * 回答完了を検知する。**送信直後（この関数の呼び出し前）の誤検知を防ぐため、監視開始時点の
  * 状態をベースラインとして記録し、そこからの「増加」でのみ完了と判定する。**
@@ -223,6 +226,13 @@ export type WaitForAnswerResult =
  * かつ生成中インジケーターが無ければ完了とみなす。
  * いずれの場合もminWaitMs（既定5000ms）が経過するまでは確定しない。
  * timeoutMs を超えた場合はタイムアウトとして結果を返す（成功扱いにはしない）。
+ *
+ * **判定はMutationObserverのコールバックではなくポーリングで回す。** 当初は各判定を
+ * Observerのコールバック内で行っていたが、minWaitMs以内に生成が完了してDOM変化が
+ * 止まると、その後Observerが二度と発火せず、どの判定も再実行されないままハード
+ * タイムアウトする問題があった（回答は画面に出ており、アンケートも表示されているのに
+ * タイムアウト扱いになる）。入力・出力が短い英訳ジョブで頻発したため、DOM変化に
+ * 依存しない駆動に変えている。Observerは「最後にDOMが動いた時刻」の記録だけに使う。
  */
 export function waitForAnswerComplete(opts: WaitForAnswerOptions = {}): Promise<WaitForAnswerResult> {
   const debounceMs = opts.debounceMs ?? 1800;
@@ -237,53 +247,56 @@ export function waitForAnswerComplete(opts: WaitForAnswerOptions = {}): Promise<
 
   return new Promise((resolve) => {
     let settled = false;
-    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-    let surveyTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastMutationAt = Date.now();
+    let surveyDetectedAt: number | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | undefined;
+    let hardTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    const observer = new MutationObserver(() => {
+      lastMutationAt = Date.now();
+    });
 
     const finish = (result: WaitForAnswerResult) => {
       if (settled) return;
       settled = true;
       observer.disconnect();
-      clearTimeout(debounceTimer);
-      clearTimeout(surveyTimer);
+      clearInterval(pollTimer);
       clearTimeout(hardTimeout);
       resolve(result);
     };
 
-    const hardTimeout = setTimeout(() => finish({ status: 'timeout' }), timeoutMs);
+    hardTimeout = setTimeout(() => finish({ status: 'timeout' }), timeoutMs);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-    const minWaitElapsed = () => Date.now() - startTime >= minWaitMs;
+    pollTimer = setInterval(() => {
+      if (Date.now() - startTime < minWaitMs) return;
 
-    const checkSurvey = () => {
-      if (!minWaitElapsed()) return;
-      if (countCompletionSurveys() <= baselineSurveyCount) return;
-      clearTimeout(surveyTimer);
-      surveyTimer = setTimeout(() => {
+      // 第一の判定: 完了アンケートの増加。検知後surveyGraceMsだけ猶予を置いてから
+      // テキストを確定させる（最後の描画が反映されるのを待つ）。
+      if (surveyDetectedAt === null && countCompletionSurveys() > baselineSurveyCount) {
+        surveyDetectedAt = Date.now();
+        console.log('[redmaru] 完了アンケートの増加を検知');
+      }
+      if (surveyDetectedAt !== null && Date.now() - surveyDetectedAt >= surveyGraceMs) {
         const text = getLatestAnswerText();
         if (text) {
           console.log('[redmaru] アンケート出現により完了と判定');
           finish({ status: 'success', text });
+          return;
         }
-      }, surveyGraceMs);
-    };
+      }
 
-    const observer = new MutationObserver(() => {
-      checkSurvey();
-
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        // アンケートが出ないサイト変更等への保険。
-        // 新しい回答コンテナが増えており、生成中インジケーターが無ければ完了とみなす。
-        if (!minWaitElapsed()) return;
-        if (isGenerating()) return;
-        if (countAnswerContainers() <= baselineAnswerCount) return;
-        const text = getLatestAnswerText();
-        if (text) {
-          console.log('[redmaru] DOM変化の静止により完了と判定（フォールバック）');
-          finish({ status: 'success', text });
-        }
-      }, debounceMs);
-    });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+      // フォールバック: アンケートが出ないサイト変更等への保険。
+      // 新しい回答コンテナが増えており、DOM変化がdebounceMs止まっていて、
+      // 生成中インジケーターも無ければ完了とみなす。
+      if (Date.now() - lastMutationAt < debounceMs) return;
+      if (isGenerating()) return;
+      if (countAnswerContainers() <= baselineAnswerCount) return;
+      const text = getLatestAnswerText();
+      if (text) {
+        console.log('[redmaru] DOM変化の静止により完了と判定（フォールバック）');
+        finish({ status: 'success', text });
+      }
+    }, COMPLETION_POLL_INTERVAL_MS);
   });
 }
